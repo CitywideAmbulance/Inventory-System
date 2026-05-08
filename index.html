@@ -404,7 +404,7 @@ let currentUser = null;
 let selectedBag = '';
 let html5QrCode = null;
 let dashboardData = null, requiredItems = [], bagList = [], vehicleList = [], cabinetList = [],
-    locationList = [], categories = [],
+    locationList = [], categories = { alsCategories:[], cabinetCategories:[] },
     equipmentLookups = { types:[], locations:[], statuses:[], serviceReasons:[] },
     narcLookups = { narcNames:[], narcKits:[] },
     cabinetRequiredItems = [];  // items for currently selected cabinet
@@ -621,7 +621,7 @@ function loadBagList(){ jsonpCall('getBagList', null, function(resp){ bagList = 
 function loadVehicleList(){ jsonpCall('getVehicleList', null, function(resp){ vehicleList = resp || []; populateVehicleSelects(); }); }
 function loadCabinetList(){ jsonpCall('getCabinetList', null, function(resp){ cabinetList = resp || []; populateCabinetSelects(); }); }
 function loadLocationList(){ jsonpCall('getLocationList', null, function(resp){ locationList = resp || []; populateLocationSelects(); }); }
-function loadCategories(){ jsonpCall('getCategories', null, function(resp){ categories = resp || []; populateCategories(); }); }
+function loadCategories(){ jsonpCall('getCategories', null, function(resp){ categories = resp || { alsCategories:[], cabinetCategories:[] }; populateCategories(); }); }
 function loadEquipmentLookups(){ jsonpCall('getEquipmentLookups', null, function(resp){ equipmentLookups = resp || { types:[], locations:[], statuses:[], serviceReasons:[] }; populateEquipmentLookups(); }); }
 function loadNarcLookups(){ jsonpCall('getNarcLookups', { location: $('narcLocation') ? $('narcLocation').value : 'Bronxcare' }, function(resp){ narcLookups = resp || { narcNames:[], narcKits:[] }; populateNarcNameList(); populateNarcKitSelect(); populateNarcVerifySelect(); if($('narcMode') && $('narcMode').value === 'verify') loadNarcVerifyRows(); }); }
 
@@ -699,8 +699,24 @@ function populateDashboardNarcKitSelect(){
 function populateReqDatalist(filterCategory){
   const dl = $('reqList'); if(!dl) return;
   dl.innerHTML = '';
-  const items = (requiredItems||[]).filter(it => (!filterCategory || filterCategory === '' || it.category === filterCategory));
-  items.forEach(it=>{ const o = document.createElement('option'); o.value=it.name; dl.appendChild(o); });
+  const alsCategories = (categories && categories.alsCategories) || [];
+  const cabCategories = (categories && categories.cabinetCategories) || [];
+
+  // Determine if the selected category is a cabinet category
+  const isCabinetCat = filterCategory && cabCategories.map(c=>c.toLowerCase()).includes(filterCategory.toLowerCase());
+
+  if(isCabinetCat){
+    // Load cabinet items for this cabinet ID dynamically
+    jsonpCall('getCategoryItems', {category: filterCategory}, function(items){
+      dl.innerHTML = '';
+      (items||[]).forEach(it=>{ const o = document.createElement('option'); o.value=it.name; dl.appendChild(o); });
+    });
+  } else {
+    // ALS required items filtered by category
+    const items = (requiredItems||[]).filter(it => (!filterCategory || filterCategory === '' || it.category === filterCategory));
+    items.forEach(it=>{ const o = document.createElement('option'); o.value=it.name; dl.appendChild(o); });
+  }
+
   const input = $('createItemName');
   if(input && !input.dataset.boundReqCategory){
     input.dataset.boundReqCategory = "1";
@@ -714,7 +730,18 @@ function populateReqDatalist(filterCategory){
 function populateCategories(){
   const sel=$('createCategory'); if(!sel) return;
   sel.innerHTML = '<option value="">-- none --</option>';
-  (categories||[]).forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+  const alsCategories = (categories && categories.alsCategories) || [];
+  const cabCategories = (categories && categories.cabinetCategories) || [];
+  if(alsCategories.length){
+    const grp = document.createElement('optgroup'); grp.label = 'ALS Bag Categories';
+    alsCategories.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; grp.appendChild(o); });
+    sel.appendChild(grp);
+  }
+  if(cabCategories.length){
+    const grp = document.createElement('optgroup'); grp.label = 'Cabinet Categories';
+    cabCategories.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; grp.appendChild(o); });
+    sel.appendChild(grp);
+  }
 }
 function populateEquipmentLookups(){
   const typeSel=$('equipmentType'), locSel=$('equipmentLocation'), statusSel=$('equipmentCurrentStatus'), reasonSel=$('equipmentServiceReason');
@@ -1236,14 +1263,18 @@ function applyMatchToRow(idx, match, mode){
 function setStatusCellWithReplacementUI(idx, currentStatus, replacementRequired, mode){
   const p = _prefix(mode);
   const wrap=$(p+'statuswrap-'+idx); if(!wrap) return;
-  const replItems = mode === 'cabinet' ? cabinetRequiredItems : requiredItems;
   wrap.innerHTML=
     '<input id="'+p+'statusinp-'+idx+'" value="'+esc(currentStatus||'OK')+'" disabled style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);" />'+
     (replacementRequired?('<div style="margin-top:6px"><label class="small">Replacing item</label><select id="'+p+'replaceReq-'+idx+'"><option value="">(select)</option></select></div><div style="margin-top:8px"><button id="'+p+'addUse-'+idx+'" class="btn small">Add & Use</button></div>'):'');
   const replaceSel=$(p+'replaceReq-'+idx);
   if(replaceSel){
     replaceSel.innerHTML='<option value="">(select)</option>';
-    (replItems||[]).forEach(r=>{ const opt=document.createElement('option'); opt.value=r.name||''; opt.textContent=(r.name||'')+' ('+(r.cabinetId||r.category||'')+')'; replaceSel.appendChild(opt); });
+    if(mode === 'cabinet'){
+      // Use cabinet required items for the selected cabinet
+      (cabinetRequiredItems||[]).forEach(r=>{ const opt=document.createElement('option'); opt.value=r.name||''; opt.textContent=(r.name||'')+' ('+r.cabinetId+')'; replaceSel.appendChild(opt); });
+    } else {
+      (requiredItems||[]).forEach(r=>{ const opt=document.createElement('option'); opt.value=r.name||''; opt.textContent=(r.name||'')+' ('+(r.category||'')+')'; replaceSel.appendChild(opt); });
+    }
   }
 }
 
@@ -1391,28 +1422,20 @@ function getSelectedCabinetLocation(){
 function initCabinetRestockRows(){
   const tbody=$('cabinetRestockBody'); if(!tbody) return;
   tbody.innerHTML='';
-  // Load items for selected cabinet
+  // Load cabinet required items in the background so replace-target dropdown works,
+  // but start with blank scan rows exactly like ALS bag restock.
   const cabId = $('cabinetSelect') ? $('cabinetSelect').value : '';
-  if(!cabId){
-    // just add empty rows
-    addCabinetRow([]); addCabinetRow([]);
-    return;
+  if(cabId){
+    jsonpCall('getCabinetRequiredItems', {cabinetId: cabId}, function(items){
+      cabinetRequiredItems = items || [];
+    });
+  } else {
+    cabinetRequiredItems = [];
   }
-  jsonpCall('getCabinetRequiredItems', {cabinetId: cabId}, function(items){
-    cabinetRequiredItems = items || [];
-    tbody.innerHTML='';
-    // Pre-populate one row per required item
-    if(cabinetRequiredItems.length > 0){
-      cabinetRequiredItems.forEach(req => {
-        addCabinetRow(cabinetRequiredItems, req.name);
-      });
-    } else {
-      addCabinetRow([]); addCabinetRow([]);
-    }
-  });
+  addCabinetRow(); addCabinetRow();
 }
 
-function addCabinetRow(items, presetName){
+function addCabinetRow(){
   const tbody=$('cabinetRestockBody');
   const idx=tbody.querySelectorAll('tr.cabinetRestockRow').length+1;
   const tr=document.createElement('tr'); tr.className='cabinetRestockRow'; tr.id='cabrow-'+idx;
@@ -1427,7 +1450,6 @@ function addCabinetRow(items, presetName){
     '<td data-label="Cabinet Qty"><input id="ccabqty-'+idx+'" type="number" min="0" value="1" style="width:84px" /></td>'+
     '<td data-label="Status"><div id="cstatuswrap-'+idx+'"></div></td>';
   tbody.appendChild(tr);
-  if(presetName){ $('cnameinp-'+idx).value = presetName; }
   $('csearch-'+idx).addEventListener('click', ()=>rowLookup(idx, 'cabinet'));
   $('cscan-'+idx).addEventListener('keydown', ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); rowLookup(idx, 'cabinet'); } });
   $('ccam-'+idx).addEventListener('click', ()=>openRowScanner(idx, 'cabinet'));
@@ -1435,10 +1457,10 @@ function addCabinetRow(items, presetName){
 
 function maybeAddCabinetRow(){
   const rows=document.querySelectorAll('tr.cabinetRestockRow');
-  if(rows.length===0){ addCabinetRow(cabinetRequiredItems); return; }
+  if(rows.length===0){ addCabinetRow(); return; }
   const lastIndex=rows.length;
   const lastNameCell=$('cnameinp-'+lastIndex);
-  if(lastNameCell&&lastNameCell.value&&lastNameCell.value.trim()!=='') addCabinetRow(cabinetRequiredItems);
+  if(lastNameCell&&lastNameCell.value&&lastNameCell.value.trim()!=='') addCabinetRow();
 }
 
 function collectCabinetEntries(){
@@ -1637,7 +1659,7 @@ window.onload = function(){
   $('equipmentCloseCam').addEventListener('click', stopScanner);
   $('createSave').addEventListener('click', createItemClient);
   $('createClear').addEventListener('click', clearCreateForm);
-  $('createCategory').addEventListener('change', ()=>populateReqDatalist($('createCategory').value||''));
+  $('createCategory').addEventListener('change', function(){ populateReqDatalist(this.value||''); });
   $('resetRows').addEventListener('click', initRestockRows);
   $('submitAll').addEventListener('click', submitAll);
 
