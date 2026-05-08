@@ -1,0 +1,1711 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ALS Inventory — Web App v2.10</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    :root{
+      --primary:#0b5fff; --on-primary:#fff; --muted:#6b7280; --card:#fff; --border:#e6e9ee; --radius:10px;
+      font-family:Segoe UI,Roboto,Arial; font-size:15px;
+    }
+    body{margin:0;background:#fff;color:#0f172a}
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px}
+    .brand{display:flex;align-items:center;gap:12px}
+    .brand img{height:48px}
+    .btn{background:var(--primary);color:var(--on-primary);border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700}
+    .btn.secondary{background:#374151}
+    .btn.small{padding:6px 8px;font-size:14px;border-radius:6px}
+    .btn:disabled{opacity:0.5;cursor:not-allowed}
+    .wrap{max-width:1280px;margin:18px auto;padding:12px;display:grid;grid-template-columns:1fr;gap:18px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+    input,select{width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);box-sizing:border-box}
+    input:disabled, select:disabled{background:#f3f6fb;color:#4b5563;cursor:not-allowed}
+    .small{font-size:13px;color:var(--muted)}
+    .tableWrap{overflow:auto;border-radius:8px;border:1px solid var(--border);background:#fff;margin-top:8px;padding:8px;transition:opacity 0.18s ease}
+    table{width:100%;border-collapse:collapse;min-width:780px}
+    thead th{background:#f3f6fb;padding:10px;text-align:left;position:sticky;top:0;z-index:1}
+    th,td{padding:10px;border-bottom:1px solid #eef0f4;vertical-align:top}
+    .cameraBtn{background:#f3f6fb;border:1px solid var(--border);padding:8px;border-radius:8px;cursor:pointer}
+    .searchActionBtn{min-width:96px;position:relative;overflow:hidden}
+    .searchBusy{pointer-events:none;opacity:0.9}
+    .searchBusy::after{
+      content:"";
+      position:absolute;
+      left:0;bottom:0;height:3px;width:100%;
+      background:linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.95) 50%, transparent 100%);
+      animation:searchSweep 1s linear infinite;
+    }
+    @keyframes searchSweep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+    @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+    @keyframes shimmer{
+      0%  {background-position:-800px 0}
+      100%{background-position: 800px 0}
+    }
+    .skel{
+      display:inline-block;height:13px;border-radius:4px;vertical-align:middle;
+      background:linear-gradient(90deg,#eef0f4 25%,#dde2ea 50%,#eef0f4 75%);
+      background-size:1600px 100%;
+      animation:shimmer 1.5s ease-in-out infinite;
+    }
+    @keyframes slideDown{
+      from{opacity:0;transform:translateY(-6px)}
+      to  {opacity:1;transform:translateY(0)}
+    }
+    .dash-sel-enter{animation:slideDown 0.22s ease forwards}
+    .readerContainer{margin-top:8px;display:none;position:relative}
+    .readerContainer.active{display:block}
+    .scannerBox{width:100%;max-width:720px;height:auto;border-radius:8px;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center}
+    .closeCam{position:absolute;right:8px;top:8px;background:rgba(0,0,0,0.55);color:#fff;border:none;padding:6px;border-radius:6px;cursor:pointer}
+    .statusMsg{margin-top:8px;font-size:13px;color:var(--muted)}
+    .matchList{border:1px solid var(--border);border-radius:8px;max-height:260px;overflow:auto;margin-top:8px;background:#fff}
+    .matchItem{padding:8px 10px;border-bottom:1px solid #f3f6fb;display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .instruction{background:#f0f7ff;border-left:4px solid var(--primary);padding:10px;margin:10px 0;border-radius:0 8px 8px 0;}
+    .instruction p{margin:5px 0;}
+    .filter-row{display:flex;gap:24px;margin:16px 0;padding:12px 16px;background:#f9fafc;border-radius:10px;border:1px solid var(--border);align-items:center;flex-wrap:wrap}
+    .filter-row label{display:flex;align-items:center;gap:8px;font-weight:500;color:#1e293b}
+    #bagCard .tableWrap td .scanWrap,
+    #narcKitCard .tableWrap td .scanWrap,
+    #cabinetCard .tableWrap td .scanWrap{display:flex;gap:6px;align-items:center}
+    #bagCard .tableWrap td .scanWrap input,
+    #narcKitCard .tableWrap td .scanWrap input,
+    #cabinetCard .tableWrap td .scanWrap input{flex:1;min-width:0;padding:8px}
+    #bagCard .tableWrap td input[type="number"],
+    #narcKitCard .tableWrap td input[type="number"],
+    #cabinetCard .tableWrap td input[type="number"]{width:92px}
+    .gray{background:#eef2f7;color:#64748b;}
+    .rowScannerContainer{border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:8px;background:#fff}
+    .signedInWrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .cabinet-section-header{background:#e8f0fe;padding:8px 12px;font-weight:700;color:#1e40af;border-radius:6px;margin-top:12px;margin-bottom:4px}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
+      <div>
+        <div style="font-weight:800">ALS Inventory — Web App v2.10</div>
+        <div class="small signedInWrap">
+          Signed in as: <span id="currentUser">...</span>
+          <div id="btnSignIn"></div>
+          <button id="btnSignOut" class="btn secondary small" title="Sign out">Sign Out</button>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button id="btnDashboard" class="btn">Dashboard</button>
+      <button id="btnCreate" class="btn">Create Item</button>
+      <button id="btnRestock" class="btn">ALS Bag Restock</button>
+      <button id="btnCabinet" class="btn">Cabinet Restock</button>
+      <button id="btnEquipment" class="btn">Equipment Inventory</button>
+      <button id="btnNarcotics" class="btn">Narcotics</button>
+      <button id="btnRefresh" class="btn secondary">Refresh</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- ── DASHBOARD ── -->
+    <div id="dashboardCard" class="card" style="display:block">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <h3 style="margin:0">Dashboard</h3>
+        <label class="small">View:
+          <select id="dashboardViewSelect">
+            <option value="items">Items</option>
+            <option value="bags">Bags (select one)</option>
+            <option value="vehicles">Vehicles (select one)</option>
+            <option value="equipment">Equipment</option>
+            <option value="narcs">Narcs</option>
+            <option value="kits">Kits (select one)</option>
+          </select>
+        </label>
+      </div>
+      <div class="filter-row">
+        <label><input type="checkbox" id="hideExpired" checked> Exclude expired items</label>
+        <label><input type="checkbox" id="hideOutOfStock"> Exclude out of stock items</label>
+      </div>
+      <div id="bagSelectorWrap" style="margin-top:8px;display:none">
+        <label>Select Bag</label>
+        <select id="dashboardBagSelect"></select>
+      </div>
+      <div id="vehicleSelectorWrap" style="margin-top:8px;display:none">
+        <label>Select Vehicle</label>
+        <select id="dashboardVehicleSelect"></select>
+      </div>
+      <div id="narcKitSelectorWrap" style="margin-top:8px;display:none">
+        <label>Select Narc Kit</label>
+        <select id="dashboardNarcKitSelect"></select>
+      </div>
+      <div class="tableWrap" style="margin-top:12px" id="dashTableWrap">
+        <table>
+          <thead id="dashboardHead"><tr></tr></thead>
+          <tbody id="dashboardBody"><tr><td class="small">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── CREATE ITEM ── -->
+    <div id="createCard" class="card" style="display:none">
+      <h3>Create Inventory Item</h3>
+      <div class="instruction">
+        <p><strong>Instructions:</strong><br>
+         • Select a <strong>Category</strong> from the dropdown.<br>
+         • Select an <strong>Item</strong> from the dropdown.<br>
+         • Select a <strong>Location</strong> (stockroom) to allocate the item to.<br>
+         • Press the camera icon to scan or type the Barcode (if available).<br>
+         • Type the Lot number (if available).<br>
+         • Choose an Expiration date (if available).<br>
+         • Enter the Quantity you are adding to stock.<br>
+         • Once you are finished, press <strong>Save item</strong> and the data will be transferred to the database.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+        <div><label>Category</label><select id="createCategory"><option value="">-- none --</option></select></div>
+        <div><label>Item name</label><input id="createItemName" list="reqList" placeholder="Type or choose" /><datalist id="reqList"></datalist></div>
+        <div><label>Location (Stockroom)</label><select id="createLocation"><option value="">-- select location --</option></select></div>
+        <div>
+          <label>Barcode</label>
+          <div style="display:flex;gap:8px">
+            <input id="createBarcode" placeholder="Scan or type barcode" />
+            <button id="createCameraBtn" class="cameraBtn">📷</button>
+          </div>
+          <div id="createScanner" class="readerContainer"><div class="scannerBox" id="createScannerBox"><div style="color:#fff">Camera preview</div></div><button class="closeCam" id="createCloseCam" style="display:none">✕</button><div id="createScannerStatus" class="statusMsg"></div></div>
+        </div>
+        <div><label>Lot number</label><input id="createLot" placeholder="Lot number" /></div>
+        <div><label>Expiration</label><input id="createExp" type="date" /></div>
+        <div><label>Quantity</label><input id="createQty" type="number" min="0" value="1" /></div>
+      </div>
+      <div style="margin-top:12px"><button id="createSave" class="btn">Save item</button> <button id="createClear" class="btn secondary">Clear</button></div>
+    </div>
+
+    <!-- ── EQUIPMENT ── -->
+    <div id="equipmentCard" class="card" style="display:none">
+      <h3>Equipment Inventory</h3>
+      <div class="instruction">
+        <p><strong>Instructions:</strong><br>
+         • Press the camera icon to scan a barcode or type the lot number/item name and press the search icon in the first column.<br>
+         • Existing equipment: fields lock and the fields for Assigned Location and Current Status remain editable.<br>
+         • Missing item: fill fields.<br>
+         • Select a <strong>Location</strong> from the dropdown.<br>
+         • Select a <strong>Status</strong> from the dropdown.<br>
+         &nbsp;&nbsp;&nbsp;&nbsp;- Active status will have new fields appear for date returned, in-service date, and upcoming service date.<br>
+         &nbsp;&nbsp;&nbsp;&nbsp;- OOS status will have new fields appear for the service reason, comments, and date shipped.<br>
+         • Once you are finished, press <strong>Save Equipment</strong> and the data will be transferred to the database.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+        <div>
+          <label>Barcode</label>
+          <div style="display:flex;gap:8px">
+            <input id="equipmentBarcode" placeholder="Scan or type barcode" />
+            <button id="equipmentSearchBtn" class="btn small secondary searchActionBtn">🔍</button>
+            <button id="equipmentCameraBtn" class="cameraBtn">📷</button>
+          </div>
+          <div id="equipmentScanner" class="readerContainer">
+            <div class="scannerBox" id="equipmentScannerBox"><div style="color:#fff">Camera preview</div></div>
+            <button class="closeCam" id="equipmentCloseCam" style="display:none">✕</button>
+            <div id="equipmentScannerStatus" class="statusMsg"></div>
+          </div>
+        </div>
+        <div><label>Equipment Type</label><select id="equipmentType"><option value="">-- select type --</option></select></div>
+        <div><label>Serial Number</label><input id="equipmentSerial" placeholder="Serial number" /></div>
+        <div><label>Make</label><input id="equipmentMake" placeholder="Make" /></div>
+        <div><label>Model</label><input id="equipmentModel" placeholder="Model" /></div>
+        <div><label>Assigned Location</label><select id="equipmentLocation"><option value="">-- select location --</option></select></div>
+        <div><label>Current Status</label><select id="equipmentCurrentStatus"><option value="">-- select status --</option></select></div>
+      </div>
+      <div id="equipmentOOSSection" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+        <h4 style="margin:0 0 10px 0">OOS Details</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+          <div><label>Service reason</label><select id="equipmentServiceReason"><option value="">-- select reason --</option></select></div>
+          <div><label>Comments</label><input id="equipmentComments" placeholder="Comments" /></div>
+          <div><label>Date Shipped</label><input id="equipmentDateShipped" type="date" /></div>
+        </div>
+      </div>
+      <div id="equipmentActiveSection" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+        <h4 style="margin:0 0 10px 0">Active / In-Service Details</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+          <div><label>Date Returned</label><input id="equipmentDateReturned" type="date" /></div>
+          <div><label>In-Service Date</label><input id="equipmentInServiceDate" type="date" /></div>
+          <div><label>Upcoming Service Date</label><input id="equipmentUpcomingServiceDate" type="date" /></div>
+        </div>
+      </div>
+      <div style="margin-top:12px"><button id="equipmentSave" class="btn">Save Equipment</button> <button id="equipmentClear" class="btn secondary">Clear</button></div>
+    </div>
+
+    <!-- ── ALS BAG RESTOCK ── -->
+    <div id="bagCard" class="card" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <h3 style="margin:0">ALS Bag Restock</h3>
+        <div class="small">Scan items, enter quantities, submit</div>
+      </div>
+      <div class="instruction">
+        <p><strong>Instructions:</strong><br>
+        • First, select a bag number from the dropdown above the table.<br>
+        • Select the <strong>Stock Location</strong> to pull inventory from.<br>
+        • Press the camera icon to scan a barcode or type the lot number/item name and press the search icon in the first column.<br>
+        • Existing item: fields lock and Bag Qty remains editable.<br>
+        • Missing item: fill fields, choose replacement, then click Add &amp; Use.<br>
+        • Once you are finished, press <strong>Submit All</strong> and the data will be transferred to the database.
+        </p>
+      </div>
+      <div style="height:10px"></div>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label>Bag</label>
+          <select id="bagSelect"></select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label>Stock Location</label>
+          <select id="bagStockLocation"><option value="">-- all locations --</option></select>
+        </div>
+      </div>
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr><th>Scan / Lot # / Name</th><th>Item Name</th><th>Lot</th><th>Expiration</th><th>Category</th><th>Location</th><th>Inv Qty</th><th>Bag Qty</th><th>Status</th></tr>
+          </thead>
+          <tbody id="restockBody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+        <button id="resetRows" class="btn secondary">Reset rows</button>
+        <button id="submitAll" class="btn">Submit All</button>
+      </div>
+    </div>
+
+    <!-- ── CABINET RESTOCK ── -->
+    <div id="cabinetCard" class="card" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <h3 style="margin:0">Cabinet Restock</h3>
+        <div class="small">Select vehicle &amp; cabinet, scan items, submit</div>
+      </div>
+      <div class="instruction">
+        <p><strong>Instructions:</strong><br>
+        • Select the <strong>Vehicle</strong> and <strong>Cabinet</strong> you are restocking.<br>
+        • Select the <strong>Stock Location</strong> to pull inventory from.<br>
+        • Press the camera icon to scan a barcode or type the lot number/item name and press the search icon.<br>
+        • Existing item: fields lock and Cabinet Qty remains editable.<br>
+        • Missing item: fill fields, choose replacement, then click Add &amp; Use.<br>
+        • Once you are finished, press <strong>Submit All</strong> and the data will be transferred to the database.
+        </p>
+      </div>
+      <div style="height:10px"></div>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label>Vehicle</label>
+          <select id="cabinetVehicleSelect"></select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label>Cabinet</label>
+          <select id="cabinetSelect"></select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label>Stock Location</label>
+          <select id="cabinetStockLocation"><option value="">-- all locations --</option></select>
+        </div>
+      </div>
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr><th>Scan / Lot # / Name</th><th>Item Name</th><th>Lot</th><th>Expiration</th><th>Category</th><th>Location</th><th>Inv Qty</th><th>Cabinet Qty</th><th>Status</th></tr>
+          </thead>
+          <tbody id="cabinetRestockBody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+        <button id="cabinetResetRows" class="btn secondary">Reset rows</button>
+        <button id="cabinetSubmitAll" class="btn">Submit All</button>
+      </div>
+    </div>
+
+    <!-- ── NARCOTICS ── -->
+    <div id="narcoticsCard" class="card" style="display:none">
+      <h3>Narcotics</h3>
+      <div class="instruction">
+        <p><strong>Instructions:</strong><br>
+         • First, select a <strong>Mode</strong> from the dropdown.<br>
+         &nbsp;&nbsp;&nbsp;&nbsp;- Create Narc is used to add the narc to the overall stock.<br>
+         &nbsp;&nbsp;&nbsp;&nbsp;- Narc Kit Restock is used to move the selected narcs to the designated kit.<br>
+         &nbsp;&nbsp;&nbsp;&nbsp;- Narc Kit Verification is used to mark the active content inside of a kit.<br>
+         • Select a <strong>Location</strong> from the dropdown.<br>
+         • Enter the data for each field.<br>
+         • Once you are finished, press <strong>Save Narc/Submit All</strong> and the data will be transferred to the database.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+        <div>
+          <label>Mode</label>
+          <select id="narcMode">
+            <option value="create">Create Narc</option>
+            <option value="kit">Narc Kit Restock</option>
+            <option value="verify">Narc Kit Verification</option>
+          </select>
+        </div>
+        <div>
+          <label>Location</label>
+          <select id="narcLocation">
+            <option value="Bronxcare">Bronxcare</option>
+            <option value="Citywide">Citywide</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="createNarcPanel" style="margin-top:14px">
+        <table>
+          <thead><tr><th>Narc Name</th><th>Barcode</th><th>Lot Number</th><th>Expiration</th><th>Quantity (Vials)</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><select id="narcName"></select></td>
+              <td><div style="display:flex;gap:8px;align-items:center"><input id="narcBarcode" /><button id="narcCameraBtn" class="cameraBtn">📷</button></div></td>
+              <td><input id="narcLot"></td>
+              <td><input id="narcExp" type="date"></td>
+              <td><input id="narcQty" type="number" min="0"></td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="margin-top:12px"><button id="saveNarcBtn" class="btn">Save Narc</button> <button id="clearNarcBtn" class="btn secondary">Clear</button></div>
+      </div>
+
+      <div id="narcKitPanel" style="display:none;margin-top:14px">
+        <div style="margin-bottom:10px"><label>Narc Kit ID</label><select id="narcKitSelect"></select></div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr><th>Scan / Lot # / Name</th><th>Narc Name</th><th>Lot</th><th>Expiration</th><th>Inv Qty</th><th>Kit Qty</th><th>Status</th></tr></thead>
+            <tbody id="narcKitBody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+          <button id="narcKitResetRows" class="btn secondary">Reset rows</button>
+          <button id="narcKitSubmitAll" class="btn">Submit All</button>
+        </div>
+      </div>
+      <div id="narcVerifyPanel" style="display:none;margin-top:14px">
+        <div style="margin-bottom:10px"><label>Narc Kit ID</label><select id="narcVerifySelect"></select></div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr><th>Active</th><th>Narc Name</th><th>Lot</th><th>Expiration</th><th>Inv Qty</th><th>Status</th></tr></thead>
+            <tbody id="narcVerifyBody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+          <button id="narcVerifyResetRows" class="btn secondary">Reset rows</button>
+          <button id="narcVerifySubmitAll" class="btn">Submit All</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const API_URL = "https://script.google.com/a/macros/citywideambulance.com/s/AKfycbyM1RyhlzUZcwTqhJiwI2GmaWaz52kJbEeFOKDb8J7Pg69zRnvsKqHf1098trpZgCh0/exec";
+const $ = id => document.getElementById(id);
+const esc = s => s==null ? "" : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+let googleToken = localStorage.getItem('als_google_token') || null;
+let currentUser = null;
+let selectedBag = '';
+let html5QrCode = null;
+let dashboardData = null, requiredItems = [], bagList = [], vehicleList = [], cabinetList = [],
+    locationList = [], categories = [],
+    equipmentLookups = { types:[], locations:[], statuses:[], serviceReasons:[] },
+    narcLookups = { narcNames:[], narcKits:[] },
+    cabinetRequiredItems = [];  // items for currently selected cabinet
+
+// ── Date / status helpers ─────────────────────────────────────────────────────
+function formatDateMMDDYYYY(dateStr){
+  if(!dateStr) return '';
+  if(typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)){
+    const [y,m,d] = dateStr.split('-');
+    return `${m}-${d}-${y}`;
+  }
+  try{
+    const d = new Date(dateStr);
+    if(isNaN(d.getTime())) return dateStr;
+    return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${d.getFullYear()}`;
+  }catch(e){ return dateStr; }
+}
+function getDaysUntil(expDateStr){
+  if(!expDateStr) return null;
+  try{
+    const [year, month, day] = expDateStr.split('-');
+    const expDate = new Date(Date.UTC(year, month-1, day));
+    const today = new Date();
+    const todayUTC = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    return Math.ceil((expDate - todayUTC)/(1000*60*60*24));
+  }catch(e){ return null; }
+}
+function enhanceStatus(status, expDateStr){
+  if(status === 'Expiring Soon' && expDateStr){
+    const days = getDaysUntil(expDateStr);
+    if(days !== null && days > 0) return `Expiring Soon (${days} days)`;
+  }
+  return status;
+}
+function computeStatusFromExp(expDateStr){
+  if(!expDateStr) return 'OK';
+  const days = getDaysUntil(expDateStr);
+  if(days === null) return 'OK';
+  if(days < 0) return 'Expired';
+  if(days <= 35) return `Expiring Soon (${days} days)`;
+  return 'OK';
+}
+
+// ── Button helpers ────────────────────────────────────────────────────────────
+function disableButton(btn, callback){
+  if(!btn) return callback();
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = '...';
+  const restore = () => { btn.disabled = false; btn.textContent = originalText; };
+  Promise.resolve(callback()).finally(restore).catch(restore);
+}
+function setSearchBusy(btn, busy){
+  if(!btn) return;
+  if(busy){
+    if(!btn.dataset.originalHtml) btn.dataset.originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.classList.add('searchBusy');
+    btn.setAttribute('aria-busy', 'true');
+    btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px">Searching<span style="display:inline-block;width:10px;height:10px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></span></span>';
+  }else{
+    if(btn.dataset.originalHtml !== undefined) btn.innerHTML = btn.dataset.originalHtml;
+    btn.disabled = false;
+    btn.classList.remove('searchBusy');
+    btn.removeAttribute('aria-busy');
+  }
+}
+function withSearchBusy(btn, work){
+  setSearchBusy(btn, true);
+  let finished = false;
+  const done = () => { if(finished) return; finished = true; setSearchBusy(btn, false); };
+  try{
+    const result = work(done);
+    if(result && typeof result.then === 'function') result.finally(done);
+  }catch(err){ done(); throw err; }
+}
+
+// ── JSONP ─────────────────────────────────────────────────────────────────────
+function jsonpCall(action, data, cb){
+  if(googleToken && action !== 'verifyToken'){ data = data || {}; data.token = googleToken; }
+  const callbackName = "cb_" + Math.random().toString(36).slice(2);
+  window[callbackName] = function(resp){
+    try{ cb(resp); }catch(e){ console.error(e); }
+    try{ delete window[callbackName]; }catch(e){}
+    const s = document.getElementById(callbackName); if(s) s.remove();
+  };
+  let url = API_URL + "?action=" + encodeURIComponent(action) + "&callback=" + encodeURIComponent(callbackName);
+  if(data !== null && typeof data !== "undefined") url += "&data=" + encodeURIComponent(JSON.stringify(data));
+  const s = document.createElement("script"); s.src = url; s.id = callbackName;
+  s.onerror = function(){ try{ delete window[callbackName]; }catch(e){} };
+  document.head.appendChild(s);
+}
+
+// ── Dashboard transition helpers ──────────────────────────────────────────────
+function dashTransition_(renderFn){
+  const wrap = $('dashTableWrap');
+  if(!wrap){ renderFn(function(){}); return; }
+  wrap.style.opacity = '0';
+  setTimeout(function(){
+    renderFn(function(){
+      requestAnimationFrame(function(){ wrap.style.opacity = '1'; });
+    });
+  }, 160);
+}
+function showDashSkeleton_(cols, numRows){
+  const head = $('dashboardHead').querySelector('tr');
+  const body = $('dashboardBody');
+  const widths = [78, 55, 68, 48, 40, 82, 60, 52];
+  head.innerHTML = Array.from({length: cols}, (_, j) =>
+    '<th><span class="skel" style="width:' + widths[j % widths.length] + '%"></span></th>'
+  ).join('');
+  body.innerHTML = '';
+  for(let i = 0; i < (numRows || 8); i++){
+    const tr = document.createElement('tr');
+    for(let j = 0; j < cols; j++){
+      const td = document.createElement('td');
+      td.innerHTML = '<span class="skel" style="width:' + widths[(i * 3 + j) % widths.length] + '%"></span>';
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+function showDashSpinner_(cols, msg){
+  const body = $('dashboardBody');
+  if(!body) return;
+  body.innerHTML =
+    '<tr><td colspan="' + cols + '" style="text-align:center;padding:28px 0">' +
+    '<div style="display:inline-flex;align-items:center;gap:10px;color:#6b7280;font-size:14px">' +
+    '<span style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#0b5fff;' +
+    'border-radius:50%;display:inline-block;animation:spin 0.75s linear infinite;flex-shrink:0"></span>' +
+    (msg || 'Loading...') + '</div></td></tr>';
+}
+
+// ── Card switching ────────────────────────────────────────────────────────────
+function showCard(id){
+  ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard'].forEach(c => {
+    const el = $(c);
+    if(el) el.style.display = (c===id) ? 'block' : 'none';
+  });
+  if(id === 'narcoticsCard'){
+    if($('narcMode') && !$('narcMode').value) $('narcMode').value = 'create';
+    toggleNarcMode();
+    loadNarcLookups();
+    if($('narcMode') && $('narcMode').value === 'verify') loadNarcVerifyRows();
+  }
+  if(id === 'cabinetCard'){
+    initCabinetRestockRows();
+  }
+  stopScanner();
+}
+
+function updateUserUI(email){
+  const el = $('currentUser');
+  if(email === null || email === undefined){
+    el.textContent = 'Signed Out';
+    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = true; });
+    ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard'].forEach(id => { const card = $(id); if(card) card.style.display = 'none'; });
+  }else{
+    el.textContent = email;
+    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = false; });
+  }
+}
+
+function signOutUser(){
+  googleToken = null; currentUser = null;
+  localStorage.removeItem('als_google_token');
+  if(window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
+  updateUserUI(null);
+}
+function handleSignIn(response){
+  googleToken = response.credential;
+  localStorage.setItem('als_google_token', googleToken);
+  jsonpCall('verifyToken', { token: googleToken }, function(resp){
+    if(resp && resp.email && resp.email !== 'unknown'){
+      currentUser = resp.email;
+      updateUserUI(resp.email);
+      showCard('dashboardCard');
+      refreshAll();
+    }else{
+      alert('Sign-in failed: ' + (resp.message || 'Invalid token'));
+      googleToken = null;
+      localStorage.removeItem('als_google_token');
+    }
+  });
+}
+
+function refreshAll(){
+  loadDashboardData();
+  loadRequiredItems();
+  loadBagList();
+  loadVehicleList();
+  loadCabinetList();
+  loadLocationList();
+  loadCategories();
+  loadEquipmentLookups();
+  loadNarcLookups();
+  initRestockRows();
+  initNarcKitRows();
+}
+
+// ── Data loaders ──────────────────────────────────────────────────────────────
+function loadDashboardData(){
+  showDashSkeleton_(7, 8);
+  jsonpCall('getDashboardData', null, function(resp){
+    dashboardData = resp || { stock:[], required:[], bags:[], vehicles:[], equipment:[], narcs:[], narcKits:[] };
+    populateDashboardBagSelect();
+    populateDashboardVehicleSelect();
+    populateDashboardNarcKitSelect();
+    renderDashboard();
+  });
+}
+function loadRequiredItems(){ jsonpCall('getRequiredItems', null, function(resp){ requiredItems = resp || []; populateReqDatalist(); }); }
+function loadBagList(){ jsonpCall('getBagList', null, function(resp){ bagList = resp || []; populateBagSelects(); }); }
+function loadVehicleList(){ jsonpCall('getVehicleList', null, function(resp){ vehicleList = resp || []; populateVehicleSelects(); }); }
+function loadCabinetList(){ jsonpCall('getCabinetList', null, function(resp){ cabinetList = resp || []; populateCabinetSelects(); }); }
+function loadLocationList(){ jsonpCall('getLocationList', null, function(resp){ locationList = resp || []; populateLocationSelects(); }); }
+function loadCategories(){ jsonpCall('getCategories', null, function(resp){ categories = resp || []; populateCategories(); }); }
+function loadEquipmentLookups(){ jsonpCall('getEquipmentLookups', null, function(resp){ equipmentLookups = resp || { types:[], locations:[], statuses:[], serviceReasons:[] }; populateEquipmentLookups(); }); }
+function loadNarcLookups(){ jsonpCall('getNarcLookups', { location: $('narcLocation') ? $('narcLocation').value : 'Bronxcare' }, function(resp){ narcLookups = resp || { narcNames:[], narcKits:[] }; populateNarcNameList(); populateNarcKitSelect(); populateNarcVerifySelect(); if($('narcMode') && $('narcMode').value === 'verify') loadNarcVerifyRows(); }); }
+
+// ── Populate helpers ──────────────────────────────────────────────────────────
+function populateBagSelects(){
+  const sel = $('bagSelect'), dash = $('dashboardBagSelect');
+  [sel, dash].forEach(s => {
+    if(!s) return;
+    const currentVal = s.value;
+    s.innerHTML = '<option value="">-- select --</option>';
+    (bagList||[]).forEach(b => { const o = document.createElement('option'); o.value = b; o.textContent = b; s.appendChild(o); });
+    if(currentVal && bagList.includes(currentVal)) s.value = currentVal;
+    else if(s === sel && selectedBag && bagList.includes(selectedBag)) s.value = selectedBag;
+  });
+  if(sel) sel.onchange = function(){ selectedBag = this.value; };
+}
+function populateVehicleSelects(){
+  const sel = $('cabinetVehicleSelect'), dash = $('dashboardVehicleSelect');
+  [sel, dash].forEach(s => {
+    if(!s) return;
+    const cur = s.value;
+    s.innerHTML = '<option value="">-- select --</option>';
+    (vehicleList||[]).forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; s.appendChild(o); });
+    if(cur && vehicleList.includes(cur)) s.value = cur;
+  });
+}
+function populateCabinetSelects(){
+  const sel = $('cabinetSelect');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- select --</option>';
+  (cabinetList||[]).forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+  if(cur && cabinetList.includes(cur)) sel.value = cur;
+}
+function populateLocationSelects(){
+  const createSel = $('createLocation');
+  const bagSel = $('bagStockLocation');
+  const cabSel = $('cabinetStockLocation');
+  [createSel, bagSel, cabSel].forEach((s, idx) => {
+    if(!s) return;
+    const cur = s.value;
+    s.innerHTML = idx === 0 ? '<option value="">-- select location --</option>' : '<option value="">-- all locations --</option>';
+    (locationList||[]).forEach(l => { const o = document.createElement('option'); o.value = l; o.textContent = l; s.appendChild(o); });
+    if(cur) s.value = cur;
+  });
+}
+function populateDashboardBagSelect(){
+  const sel = $('dashboardBagSelect'); if(!sel) return;
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">-- select bag --</option>';
+  (dashboardData && dashboardData.bags || []).forEach(b => {
+    const o = document.createElement('option'); o.value = b.bagId || b; o.textContent = b.bagId || b; sel.appendChild(o);
+  });
+  if(currentVal) sel.value = currentVal;
+}
+function populateDashboardVehicleSelect(){
+  const sel = $('dashboardVehicleSelect'); if(!sel) return;
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">-- select vehicle --</option>';
+  (dashboardData && dashboardData.vehicles || []).forEach(v => {
+    const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o);
+  });
+  if(currentVal) sel.value = currentVal;
+}
+function populateDashboardNarcKitSelect(){
+  const sel = $('dashboardNarcKitSelect'); if(!sel) return;
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">-- select kit --</option>';
+  (dashboardData && dashboardData.narcKits || []).forEach(k => {
+    const id = k.bronxcare || k.citywide; if(!id) return;
+    const o = document.createElement('option'); o.value = id; o.textContent = id; sel.appendChild(o);
+  });
+  if(currentVal) sel.value = currentVal;
+}
+function populateReqDatalist(filterCategory){
+  const dl = $('reqList'); if(!dl) return;
+  dl.innerHTML = '';
+  const items = (requiredItems||[]).filter(it => (!filterCategory || filterCategory === '' || it.category === filterCategory));
+  items.forEach(it=>{ const o = document.createElement('option'); o.value=it.name; dl.appendChild(o); });
+  const input = $('createItemName');
+  if(input && !input.dataset.boundReqCategory){
+    input.dataset.boundReqCategory = "1";
+    input.addEventListener('input', function(){
+      const v=(this.value||'').trim().toLowerCase();
+      const found = (requiredItems||[]).find(r => (r.name||'').toLowerCase() === v);
+      if(found) $('createCategory').value = found.category || '';
+    });
+  }
+}
+function populateCategories(){
+  const sel=$('createCategory'); if(!sel) return;
+  sel.innerHTML = '<option value="">-- none --</option>';
+  (categories||[]).forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+}
+function populateEquipmentLookups(){
+  const typeSel=$('equipmentType'), locSel=$('equipmentLocation'), statusSel=$('equipmentCurrentStatus'), reasonSel=$('equipmentServiceReason');
+  if(typeSel){ const cur=typeSel.value; typeSel.innerHTML='<option value="">-- select type --</option>'; (equipmentLookups.types||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;typeSel.appendChild(o);}); if(cur) typeSel.value=cur; }
+  if(locSel){ const cur=locSel.value; locSel.innerHTML='<option value="">-- select location --</option>'; (equipmentLookups.locations||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;locSel.appendChild(o);}); if(cur) locSel.value=cur; }
+  if(statusSel){ const cur=statusSel.value; statusSel.innerHTML='<option value="">-- select status --</option>'; (equipmentLookups.statuses||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;statusSel.appendChild(o);}); if(cur) statusSel.value=cur; }
+  if(reasonSel){ const cur=reasonSel.value; reasonSel.innerHTML='<option value="">-- select reason --</option>'; (equipmentLookups.serviceReasons||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;reasonSel.appendChild(o);}); if(cur) reasonSel.value=cur; }
+}
+function populateNarcNameList(){
+  const sel=$('narcName'); if(!sel) return;
+  sel.innerHTML='<option value="">-- select --</option>';
+  (narcLookups.narcNames||[]).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
+}
+function populateNarcKitSelect(){
+  const sel=$('narcKitSelect'); if(!sel) return;
+  sel.innerHTML='<option value="">-- select --</option>';
+  (narcLookups.narcKits||[]).forEach(k=>{const o=document.createElement('option');o.value=k;o.textContent=k;sel.appendChild(o);});
+}
+function populateNarcVerifySelect(){
+  const sel=$('narcVerifySelect'); if(!sel) return;
+  sel.innerHTML='<option value="">-- select --</option>';
+  (narcLookups.narcKits||[]).forEach(k=>{const o=document.createElement('option');o.value=k;o.textContent=k;sel.appendChild(o);});
+}
+
+// ── Dashboard render ──────────────────────────────────────────────────────────
+function onDashboardViewToggle(){
+  const v = $('dashboardViewSelect').value;
+  const bagWrap = $('bagSelectorWrap');
+  const vehicleWrap = $('vehicleSelectorWrap');
+  const kitWrap = $('narcKitSelectorWrap');
+
+  [bagWrap, vehicleWrap, kitWrap].forEach(w => { if(w){ w.style.display='none'; w.classList.remove('dash-sel-enter'); } });
+
+  function slideIn(el){
+    el.style.display='block';
+    void el.offsetWidth;
+    el.classList.add('dash-sel-enter');
+  }
+
+  if(v === 'bags') slideIn(bagWrap);
+  else if(v === 'vehicles') slideIn(vehicleWrap);
+  else if(v === 'kits') slideIn(kitWrap);
+
+  renderDashboard();
+}
+
+function renderDashboard(){
+  const view = $('dashboardViewSelect').value || 'items';
+  dashTransition_(function(done){
+    if(view === 'items')         { renderDashboardItems();        done(); }
+    else if(view === 'equipment'){ renderDashboardEquipment();    done(); }
+    else if(view === 'narcs')    { renderDashboardNarcs();        done(); }
+    else if(view === 'kits')     { renderDashboardKits(done); }
+    else if(view === 'vehicles') { renderDashboardVehicles(done); }
+    else                         { renderDashboardBags(done); }
+  });
+}
+
+function renderDashboardItems(){
+  const body=$('dashboardBody'), head=$('dashboardHead').querySelector('tr');
+  head.innerHTML = '<th>Item Name</th><th>Barcode</th><th>Lot</th><th>Expiration</th><th>Remaining</th><th>Category</th><th>Location</th><th>Status</th>';
+  if(!dashboardData || !dashboardData.stock){ body.innerHTML='<tr><td class="small">No data</td></tr>'; return; }
+  const hideExpired=$('hideExpired').checked, hideOutOfStock=$('hideOutOfStock').checked;
+  let rows = dashboardData.stock;
+  if(hideExpired) rows = rows.filter(r => r.status !== 'Expired');
+  if(hideOutOfStock) rows = rows.filter(r => r.remaining > 0);
+  if(rows.length===0){ body.innerHTML='<tr><td colspan="8" class="small">No stock</td></tr>'; return; }
+  body.innerHTML = '';
+  rows.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  rows.forEach(r=>{
+    let status = r.status; if(r.remaining <= 0) status = 'Out of Stock';
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+esc(r.name)+'</td><td>'+esc(r.barcode)+'</td><td>'+esc(r.lotNumber)+'</td><td>'+esc(formatDateMMDDYYYY(r.expirationDate))+'</td><td>'+esc(r.remaining)+'</td><td>'+esc(r.category)+'</td><td>'+esc(r.location||'')+'</td><td>'+esc(status)+'</td>';
+    body.appendChild(tr);
+  });
+}
+
+function renderDashboardEquipment(){
+  const body=$('dashboardBody'), head=$('dashboardHead').querySelector('tr');
+  head.innerHTML='<th>Barcode</th><th>Equipment Type</th><th>Serial Number</th><th>Make</th><th>Model</th><th>Assigned Location</th><th>Status</th><th>Status Date</th>';
+  if(!dashboardData || !dashboardData.equipment){ body.innerHTML='<tr><td colspan="8" class="small">No equipment</td></tr>'; return; }
+  const rows=dashboardData.equipment.slice().sort((a,b)=>(a.equipmentType||'').localeCompare(b.equipmentType||'')||(a.barcode||'').localeCompare(b.barcode||''));
+  if(!rows.length){ body.innerHTML='<tr><td colspan="8" class="small">No equipment</td></tr>'; return; }
+  body.innerHTML='';
+  rows.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+esc(r.barcode)+'</td><td>'+esc(r.equipmentType)+'</td><td>'+esc(r.serialNumber)+'</td><td>'+esc(r.make)+'</td><td>'+esc(r.model)+'</td><td>'+esc(r.assignedLocation)+'</td><td>'+esc(r.status||'')+'</td><td>'+esc(r.statusDate||'')+'</td>';
+    body.appendChild(tr);
+  });
+}
+
+function renderDashboardNarcs(){
+  const body=$('dashboardBody'), head=$('dashboardHead').querySelector('tr');
+  head.innerHTML='<th>Narc Name</th><th>Barcode</th><th>Lot Number</th><th>Expiration</th><th>Quantity</th><th>Location</th><th>Status</th>';
+  if(!dashboardData || !dashboardData.narcs){ body.innerHTML='<tr><td colspan="7" class="small">No narc stock</td></tr>'; return; }
+  const hideExpired=$('hideExpired').checked, hideOutOfStock=$('hideOutOfStock').checked;
+  let rows=(dashboardData.narcs||[]).filter(r=>{
+    if(String(r.name||'').includes('[Removed]')) return false;
+    if(hideExpired && r.status==='Expired') return false;
+    if(hideOutOfStock && Number(r.quantity||0)<=0) return false;
+    return true;
+  });
+  if(!rows.length){ body.innerHTML='<tr><td colspan="7" class="small">No narc stock</td></tr>'; return; }
+  body.innerHTML='';
+  rows.forEach(r=>{
+    let status=r.status||''; if(Number(r.quantity||0)<=0) status='Out of Stock';
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+esc(r.name)+'</td><td>'+esc(r.barcode)+'</td><td>'+esc(r.lotNumber)+'</td><td>'+esc(formatDateMMDDYYYY(r.expirationDate))+'</td><td>'+esc(r.quantity)+'</td><td>'+esc(r.location)+'</td><td>'+esc(status)+'</td>';
+    body.appendChild(tr);
+  });
+}
+
+function renderDashboardKits(done){
+  done = done || function(){};
+  const selectedKit=$('dashboardNarcKitSelect').value;
+  const body=$('dashboardBody'), head=$('dashboardHead').querySelector('tr');
+  head.innerHTML='<th>Narc Name</th><th>Lot Number</th><th>Expiration Date</th><th>Quantity</th><th>Status</th>';
+  if(!selectedKit){
+    body.innerHTML='<tr><td colspan="5" class="small">Select a kit</td></tr>';
+    done(); return;
+  }
+  showDashSpinner_(5, 'Loading kit contents…');
+  done();
+  jsonpCall('getNarcKitContents', { kitId: selectedKit }, function(results){
+    body.innerHTML='';
+    if(!results || !results.length){ body.innerHTML='<tr><td colspan="5" class="small">No kit data</td></tr>'; return; }
+    results.forEach(r=>{
+      if(!r.items || !r.items.length){
+        const tr=document.createElement('tr');
+        tr.innerHTML='<td>'+esc(r.name||'')+'</td><td></td><td></td><td></td><td></td>';
+        body.appendChild(tr); return;
+      }
+      r.items.forEach(it=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML='<td>'+esc(it.name||'')+'</td><td>'+esc(it.lot||'')+'</td><td>'+esc(formatDateMMDDYYYY(it.exp))+'</td><td>'+esc(it.qty||0)+'</td><td>'+esc(it.status||'')+'</td>';
+        body.appendChild(tr);
+      });
+    });
+  });
+}
+
+function renderDashboardBags(done){
+  done = done || function(){};
+  const selBag=$('dashboardBagSelect').value;
+  const body=$('dashboardBody'), head=$('dashboardHead').querySelector('tr');
+  head.innerHTML='<th>Required Item</th><th>Required Qty</th><th>Provided Qty</th><th>Items (exp / lot / qty)</th>';
+  if(!selBag){
+    body.innerHTML='<tr><td colspan="4" class="small">Select a bag</td></tr>';
+    done(); return;
+  }
+  showDashSpinner_(4, 'Loading bag contents…');
+  done();
+  jsonpCall('getBagContents', { bagId: selBag }, function(results){
+    body.innerHTML='';
+    if(!results || !results.length){ body.innerHTML='<tr><td colspan="4" class="small">No required items</td></tr>'; return; }
+    results.forEach(r=>{
+      const itemsHtml=(r.items||[]).map(it=>'<div style="padding:4px 0">'+esc(formatDateMMDDYYYY(it.exp))+' | '+esc(it.lot||'')+' | '+esc(it.qty||0)+'</div>').join('');
+      const tr=document.createElement('tr');
+      tr.innerHTML='<td>'+esc(r.name)+'</td><td>'+esc(String(r.requiredQty))+'</td><td>'+esc(String(r.providedQty||0))+'</td><td>'+itemsHtml+'</td>';
+      body.appendChild(tr);
+    });
+  });
+}
+
+function renderDashboardVehicles(done){
+  done = done || function(){};
+  const selVehicle = $('dashboardVehicleSelect').value;
+  const body = $('dashboardBody'), head = $('dashboardHead').querySelector('tr');
+  head.innerHTML = '<th>Cabinet</th><th>Required Item</th><th>Required Qty</th><th>Provided Qty</th><th>Items (exp / lot / qty)</th>';
+  if(!selVehicle){
+    body.innerHTML = '<tr><td colspan="5" class="small">Select a vehicle</td></tr>';
+    done(); return;
+  }
+  showDashSpinner_(5, 'Loading vehicle contents…');
+  done();
+  jsonpCall('getVehicleContents', { vehicleId: selVehicle }, function(results){
+    body.innerHTML = '';
+    if(!results || !results.length){ body.innerHTML = '<tr><td colspan="5" class="small">No vehicle data</td></tr>'; return; }
+    results.forEach(r => {
+      const itemsHtml = (r.items||[]).map(it => '<div style="padding:4px 0">'+esc(formatDateMMDDYYYY(it.exp))+' | '+esc(it.lot||'')+' | '+esc(it.qty||0)+'</div>').join('');
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>'+esc(r.cabinetId||'')+'</td><td>'+esc(r.name)+'</td><td>'+esc(String(r.requiredQty))+'</td><td>'+esc(String(r.providedQty||0))+'</td><td>'+itemsHtml+'</td>';
+      body.appendChild(tr);
+    });
+  });
+}
+
+// ── Create Item ───────────────────────────────────────────────────────────────
+function clearCreateForm(){ $('createItemName').value=''; $('createBarcode').value=''; $('createLot').value=''; $('createExp').value=''; $('createQty').value=1; $('createCategory').value=''; $('createLocation').value=''; }
+function createItemClient(){
+  const btn=$('createSave');
+  disableButton(btn, ()=>new Promise((resolve)=>{
+    const payload={
+      name:($('createItemName').value||'').trim(),
+      barcode:($('createBarcode').value||'').trim(),
+      lot:($('createLot').value||'').trim(),
+      exp:($('createExp').value||'').trim(),
+      qty:Number($('createQty').value||0),
+      category:($('createCategory').value||'').trim(),
+      location:($('createLocation').value||'').trim()
+    };
+    if(!payload.name){ alert('Item name required'); resolve(); return; }
+    if(!payload.location){ alert('Location (stockroom) is required'); resolve(); return; }
+    jsonpCall('createItem', payload, function(res){
+      if(!res||res.success===false){ alert((res&&res.message)?res.message:'Create failed'); resolve(); return; }
+      clearCreateForm(); refreshAll(); alert(res.message||'Saved'); resolve();
+    });
+  }));
+}
+
+// ── Equipment ─────────────────────────────────────────────────────────────────
+function clearEquipmentForm(){
+  ['equipmentBarcode','equipmentSerial','equipmentMake','equipmentModel','equipmentComments'].forEach(id=>{const el=$(id);if(el)el.value='';});
+  ['equipmentType','equipmentLocation','equipmentCurrentStatus','equipmentServiceReason'].forEach(id=>{const el=$(id);if(el)el.value='';});
+  ['equipmentDateShipped','equipmentDateReturned','equipmentInServiceDate','equipmentUpcomingServiceDate'].forEach(id=>{const el=$(id);if(el)el.value='';});
+  $('equipmentOOSSection').style.display='none';
+  $('equipmentActiveSection').style.display='none';
+  setEquipmentLocked(false);
+}
+function setEquipmentLocked(locked){
+  ['equipmentType','equipmentSerial','equipmentMake','equipmentModel'].forEach(id=>{const el=$(id);if(el)el.disabled=!!locked;});
+}
+function normalizeEquipmentStatus(v){ return String(v||'').trim().toLowerCase(); }
+function updateEquipmentStatusUI(){
+  const s=normalizeEquipmentStatus($('equipmentCurrentStatus').value);
+  const oos=s==='oos'||s==='out of service'||s==='out-of-service';
+  const active=s==='active'||s==='in service'||s==='in-service';
+  $('equipmentOOSSection').style.display=oos?'block':'none';
+  $('equipmentActiveSection').style.display=active?'block':'none';
+  ['equipmentServiceReason','equipmentComments','equipmentDateShipped'].forEach(id=>{const el=$(id);if(el)el.disabled=!oos;});
+  ['equipmentDateReturned','equipmentInServiceDate','equipmentUpcomingServiceDate'].forEach(id=>{const el=$(id);if(el)el.disabled=!active;});
+}
+function fillEquipmentForm(rec, lockBasic){
+  $('equipmentBarcode').value=rec.barcode||'';
+  $('equipmentType').value=rec.equipmentType||'';
+  $('equipmentSerial').value=rec.serialNumber||'';
+  $('equipmentMake').value=rec.make||'';
+  $('equipmentModel').value=rec.model||'';
+  $('equipmentLocation').value=rec.assignedLocation||'';
+  $('equipmentCurrentStatus').value=rec.currentStatus||'';
+  $('equipmentServiceReason').value=rec.serviceReason||'';
+  $('equipmentComments').value=rec.comments||'';
+  $('equipmentDateShipped').value=rec.dateShipped||'';
+  $('equipmentDateReturned').value=rec.dateReturned||'';
+  $('equipmentInServiceDate').value=rec.inServiceDate||'';
+  $('equipmentUpcomingServiceDate').value=rec.upcomingServiceDate||'';
+  setEquipmentLocked(!!lockBasic);
+  updateEquipmentStatusUI();
+}
+function searchEquipmentClient(){
+  const btn=$('equipmentSearchBtn');
+  const q=($('equipmentBarcode').value||'').trim();
+  if(!q){ alert('Type or scan a barcode first'); return; }
+  withSearchBusy(btn, (done)=>{
+    jsonpCall('searchEquipment', {q}, function(res){
+      try{ if(res&&res.found&&res.match) fillEquipmentForm(res.match,true); else{ setEquipmentLocked(false); updateEquipmentStatusUI(); } }finally{ done(); }
+    });
+  });
+}
+function saveEquipmentClient(){
+  const btn=$('equipmentSave');
+  disableButton(btn, ()=>new Promise((resolve)=>{
+    const status=$('equipmentCurrentStatus').value||'';
+    const norm=normalizeEquipmentStatus(status);
+    const payload={ equipmentType:($('equipmentType').value||'').trim(), serialNumber:($('equipmentSerial').value||'').trim(), make:($('equipmentMake').value||'').trim(), model:($('equipmentModel').value||'').trim(), assignedLocation:($('equipmentLocation').value||'').trim(), currentStatus:status, serviceReason:'', comments:'', dateShipped:'', dateReturned:'', inServiceDate:'', upcomingServiceDate:'' };
+    if(norm==='oos'||norm==='out of service'||norm==='out-of-service'){ payload.serviceReason=($('equipmentServiceReason').value||'').trim(); payload.comments=($('equipmentComments').value||'').trim(); payload.dateShipped=($('equipmentDateShipped').value||'').trim(); }
+    else if(norm==='active'||norm==='in service'||norm==='in-service'){ payload.dateReturned=($('equipmentDateReturned').value||'').trim(); payload.inServiceDate=($('equipmentInServiceDate').value||'').trim(); payload.upcomingServiceDate=($('equipmentUpcomingServiceDate').value||'').trim(); }
+    if(!payload.equipmentType){ alert('Equipment Type is required'); resolve(); return; }
+    if(!payload.serialNumber){ alert('Serial Number is required'); resolve(); return; }
+    if(!payload.assignedLocation){ alert('Assigned Location is required'); resolve(); return; }
+    jsonpCall('saveEquipment', payload, function(res){
+      if(!res||res.success===false){ alert((res&&res.message)?res.message:'Equipment save failed'); resolve(); return; }
+      clearEquipmentForm(); refreshAll(); alert(res.message||'Equipment saved'); resolve();
+    });
+  }));
+}
+
+// ── Narcotics ─────────────────────────────────────────────────────────────────
+function clearNarcForm(){ $('narcBarcode').value=''; $('narcLot').value=''; $('narcExp').value=''; $('narcQty').value=''; $('narcName').value=''; }
+function saveNarcClient(){
+  const btn=$('saveNarcBtn');
+  disableButton(btn, ()=>new Promise((resolve)=>{
+    const payload={ name:$('narcName').value||'', barcode:$('narcBarcode').value||'', lot:$('narcLot').value||'', exp:$('narcExp').value||'', qty:Number($('narcQty').value||0), location:$('narcLocation').value||'' };
+    jsonpCall('saveNarc', payload, function(res){
+      if(!res||res.success===false){ alert((res&&res.message)?res.message:'Save failed'); resolve(); return; }
+      clearNarcForm(); alert(res.message||'Saved'); refreshAll(); resolve();
+    });
+  }));
+}
+function loadNarcVerifyRows(){
+  const kitId=$('narcVerifySelect')?$('narcVerifySelect').value:'';
+  const tbody=$('narcVerifyBody'); if(!tbody) return;
+  tbody.innerHTML='';
+  if(!kitId){ tbody.innerHTML='<tr><td colspan="6" class="small">Select a kit</td></tr>'; return; }
+  jsonpCall('getNarcKitContents', { kitId }, function(results){
+    tbody.innerHTML='';
+    const rows=[]; let seq=0;
+    (results||[]).forEach(group=>{
+      (group.items||[]).forEach(it=>{
+        rows.push({ seq:seq++, kitId, name:it.name||group.name||'', barcode:it.barcode||'', lot:it.lot||'', exp:it.exp||'', qty:Number(it.qty||0), status:it.status||'' });
+      });
+    });
+    if(!rows.length){ tbody.innerHTML='<tr><td colspan="6" class="small">No kit data</td></tr>'; return; }
+    rows.forEach(r=>{
+      const tr=document.createElement('tr'); tr.className='narcVerifyRow'; tr.dataset.seq=String(r.seq);
+      tr.innerHTML='<td><input type="checkbox" class="narcVerifyActive" data-kit="'+esc(r.kitId)+'" data-seq="'+esc(r.seq)+'" data-name="'+esc(r.name)+'" data-barcode="'+esc(r.barcode)+'" data-lot="'+esc(r.lot)+'" data-exp="'+esc(r.exp)+'" data-qty="'+esc(r.qty)+'" data-status="'+esc(r.status)+'" checked></td><td>'+esc(r.name)+'</td><td>'+esc(r.lot)+'</td><td>'+esc(formatDateMMDDYYYY(r.exp))+'</td><td>'+esc(r.qty)+'</td><td>'+esc(r.status||'')+'</td>';
+      tbody.appendChild(tr);
+    });
+  });
+}
+function collectNarcVerifyEntries(){
+  const kitId=$('narcVerifySelect')?$('narcVerifySelect').value:'';
+  if(!kitId){ alert('Select a Narc Kit ID first'); return null; }
+  const rows=Array.from(document.querySelectorAll('.narcVerifyRow'));
+  const entries=rows.map((tr,idx)=>{
+    const cb=tr.querySelector('.narcVerifyActive');
+    return { kitId, seq:Number(tr.dataset.seq||idx), name:cb?(cb.dataset.name||''):'', barcode:cb?(cb.dataset.barcode||''):'', lot:cb?(cb.dataset.lot||''):'', exp:cb?(cb.dataset.exp||''):'', qty:cb?Number(cb.dataset.qty||0):0, status:cb?(cb.dataset.status||''):'', active:!!(cb&&cb.checked) };
+  }).filter(e=>e.name||e.barcode||e.lot);
+  return entries;
+}
+function submitNarcVerifyClient(){
+  const btn=$('narcVerifySubmitAll');
+  disableButton(btn, ()=>new Promise((resolve)=>{
+    const entries=collectNarcVerifyEntries();
+    if(entries===null){ resolve(); return; }
+    if(entries.length===0){ alert('No active items selected'); resolve(); return; }
+    jsonpCall('submitNarcKitVerification', entries, function(res){
+      if(!res||res.success===false){ alert((res&&res.message)?res.message:'Submit failed'); resolve(); return; }
+      alert(res.message||'Verification saved'); loadNarcVerifyRows(); refreshAll(); resolve();
+    });
+  }));
+}
+function toggleNarcMode(){
+  const mode=$('narcMode')?$('narcMode').value:'create';
+  const createPanel=$('createNarcPanel'), kitPanel=$('narcKitPanel'), verifyPanel=$('narcVerifyPanel');
+  if(createPanel) createPanel.style.display=mode==='create'?'block':'none';
+  if(kitPanel) kitPanel.style.display=mode==='kit'?'block':'none';
+  if(verifyPanel) verifyPanel.style.display=mode==='verify'?'block':'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ALS BAG RESTOCK (location-aware)
+// ═══════════════════════════════════════════════════════════════════════════════
+function getSelectedBagLocation(){
+  return ($('bagStockLocation') ? $('bagStockLocation').value : '') || '';
+}
+
+function initRestockRows(){
+  const tbody=$('restockBody'); if(!tbody) return;
+  tbody.innerHTML='';
+  addRestockRow(); addRestockRow();
+  if(selectedBag) $('bagSelect').value=selectedBag;
+}
+function addRestockRow(){
+  const tbody=$('restockBody');
+  const idx=tbody.querySelectorAll('tr.restockRow').length+1;
+  const tr=document.createElement('tr'); tr.className='restockRow'; tr.id='row-'+idx;
+  tr.innerHTML=
+    '<td data-label="Scan / Lot # / Name"><div class="scanWrap"><input id="scan-'+idx+'" placeholder="Scan barcode or enter lot/name" /><button id="search-'+idx+'" class="btn small secondary searchActionBtn">🔍</button><button id="cam-'+idx+'" class="cameraBtn">📷</button></div><div id="matches-'+idx+'"></div></td>'+
+    '<td data-label="Item Name"><input id="nameinp-'+idx+'" /></td>'+
+    '<td data-label="Lot"><input id="lotinp-'+idx+'" /></td>'+
+    '<td data-label="Expiration"><input type="date" id="expinp-'+idx+'" /></td>'+
+    '<td data-label="Category"><input id="catinp-'+idx+'" /></td>'+
+    '<td data-label="Location"><input id="locinp-'+idx+'" class="gray" disabled /></td>'+
+    '<td data-label="Inv Qty"><input id="invqty-'+idx+'" type="number" min="0" value="" class="gray" disabled /><div id="stockinfo-'+idx+'" class="small" style="margin-top:4px"></div></td>'+
+    '<td data-label="Bag Qty"><input id="bagqty-'+idx+'" type="number" min="0" value="1" style="width:84px" /></td>'+
+    '<td data-label="Status"><div id="statuswrap-'+idx+'"></div></td>';
+  tbody.appendChild(tr);
+  $('search-'+idx).addEventListener('click', ()=>rowLookup(idx, 'bag'));
+  $('scan-'+idx).addEventListener('keydown', ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); rowLookup(idx, 'bag'); } });
+  $('cam-'+idx).addEventListener('click', ()=>openRowScanner(idx, 'bag'));
+}
+
+function openRowScanner(idx, mode){
+  const rowId = mode === 'cabinet' ? 'cabrow-'+idx : 'row-'+idx;
+  const row=$(rowId); if(!row) return;
+  document.querySelectorAll('.rowScannerContainer').forEach(o=>o.remove());
+  stopScanner();
+  const containerId = (mode === 'cabinet' ? 'cabRowScannerContainer-' : 'rowScannerContainer-') + idx;
+  const container=document.createElement('div');
+  container.className='rowScannerContainer readerContainer'; container.id=containerId;
+  const boxId = (mode === 'cabinet' ? 'cabRowScannerBox-' : 'rowScannerBox-') + idx;
+  const closeId = (mode === 'cabinet' ? 'cabRowScannerClose-' : 'rowScannerClose-') + idx;
+  const statusId = (mode === 'cabinet' ? 'cabRowScannerStatus-' : 'rowScannerStatus-') + idx;
+  const targetInputId = mode === 'cabinet' ? 'cscan-'+idx : 'scan-'+idx;
+  container.innerHTML='<div class="scannerBox" id="'+boxId+'"><div style="color:#fff">Camera preview</div></div><button class="closeCam" id="'+closeId+'">✕</button><div id="'+statusId+'" class="statusMsg"></div>';
+  row.parentNode.insertBefore(container, row.nextSibling);
+  $(closeId).addEventListener('click', stopScanner);
+  startScannerHtml5(boxId, targetInputId, containerId, statusId, closeId);
+}
+
+async function startScannerHtml5(boxId, targetInputId, readerContainerId, statusId, closeBtnId){
+  if(html5QrCode){ await html5QrCode.stop().catch(()=>{}); html5QrCode=null; }
+  const readerContainer=$(readerContainerId), statusEl=$(statusId), closeBtn=$(closeBtnId);
+  if(readerContainer){ readerContainer.style.display='block'; readerContainer.classList.add('active'); }
+  if(statusEl) statusEl.textContent='Starting camera...';
+  if(closeBtn) closeBtn.style.display='none';
+  const box=$(boxId); if(!box) return;
+  box.innerHTML='';
+  try{
+    html5QrCode=new Html5Qrcode(boxId);
+    await html5QrCode.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250}},(decodedText)=>{ handleDetectedCode(decodedText,targetInputId); stopScanner(); });
+    if(statusEl) statusEl.textContent='Scanning — point camera at barcode';
+    if(closeBtn) closeBtn.style.display='inline-block';
+  }catch(err){
+    if(statusEl) statusEl.textContent='Camera access denied or failed.';
+    alert('Camera access denied or failed. You can also enter manually.');
+    if(readerContainer){ readerContainer.style.display='none'; readerContainer.classList.remove('active'); }
+  }
+}
+function stopScanner(){
+  if(html5QrCode){ html5QrCode.stop().then(()=>{ html5QrCode=null; }).catch(()=>{}); }
+  ['createScanner','equipmentScanner'].forEach(id=>{ const el=$(id); if(el){ el.style.display='none'; el.classList.remove('active'); } });
+  document.querySelectorAll('.rowScannerContainer').forEach(rc=>{ try{ rc.remove(); }catch(e){} });
+}
+function handleDetectedCode(code, targetInputId){
+  const tgt=$(targetInputId); if(!tgt) return;
+  if(targetInputId==='createBarcode'){ tgt.value=code; tgt.dataset.scannedBarcode=code; return; }
+  if(targetInputId==='equipmentBarcode'){ tgt.value=code; tgt.dataset.scannedBarcode=code; searchEquipmentClient(); return; }
+  if(targetInputId==='narcBarcode'){ tgt.value=code; tgt.dataset.scannedBarcode=code; return; }
+  const mBag=targetInputId.match(/^scan-(\d+)$/);
+  if(mBag){
+    const idx=Number(mBag[1]);
+    const loc=getSelectedBagLocation();
+    jsonpCall('getItem', {q:code,filterInvalid:false,location:loc}, function(res){
+      if(!res||!res.found||!res.matches||res.matches.length===0){ showInlineAdd(idx,code,true,'bag'); return; }
+      const codeNorm=String(code||'').trim().toLowerCase();
+      const exact=res.matches.filter(mm=>String(mm.barcode||'').trim().toLowerCase()===codeNorm);
+      if(exact.length===1){ applyMatchToRow(idx,exact[0],'bag'); return; }
+      if(exact.length>1){ showMatchesList(idx,exact,'bag'); return; }
+      if(res.matches.length===1){ applyMatchToRow(idx,res.matches[0],'bag'); return; }
+      showMatchesList(idx,res.matches,'bag');
+    });
+    return;
+  }
+  const mCab=targetInputId.match(/^cscan-(\d+)$/);
+  if(mCab){
+    const idx=Number(mCab[1]);
+    const loc=getSelectedCabinetLocation();
+    jsonpCall('getItem', {q:code,filterInvalid:false,location:loc}, function(res){
+      if(!res||!res.found||!res.matches||res.matches.length===0){ showInlineAdd(idx,code,true,'cabinet'); return; }
+      const codeNorm=String(code||'').trim().toLowerCase();
+      const exact=res.matches.filter(mm=>String(mm.barcode||'').trim().toLowerCase()===codeNorm);
+      if(exact.length===1){ applyMatchToRow(idx,exact[0],'cabinet'); return; }
+      if(exact.length>1){ showMatchesList(idx,exact,'cabinet'); return; }
+      if(res.matches.length===1){ applyMatchToRow(idx,res.matches[0],'cabinet'); return; }
+      showMatchesList(idx,res.matches,'cabinet');
+    });
+  }
+}
+
+function rowLookup(idx, mode){
+  const scanId = mode === 'cabinet' ? 'cscan-'+idx : 'scan-'+idx;
+  const searchId = mode === 'cabinet' ? 'csearch-'+idx : 'search-'+idx;
+  const btn=$(searchId);
+  const input=$(scanId); if(!input) return;
+  const typed=(input.value||'').trim(); if(!typed){ alert('Type or scan something first'); return; }
+  const searchVal=input.dataset.scannedBarcode||typed;
+  const loc = mode === 'cabinet' ? getSelectedCabinetLocation() : getSelectedBagLocation();
+  withSearchBusy(btn, (done)=>{
+    jsonpCall('getItem', {q:searchVal,filterInvalid:false,location:loc}, function(res){
+      try{
+        if(!res||!res.found||!res.matches||res.matches.length===0){ showInlineAdd(idx,searchVal,!!input.dataset.scannedBarcode,mode); return; }
+        const code=String(searchVal||'').toString().trim().toLowerCase();
+        const exact=res.matches.filter(m=>String(m.barcode||'').toString().trim().toLowerCase()===code);
+        if(exact.length===1){ applyMatchToRow(idx,exact[0],mode); return; }
+        if(exact.length>1){ showMatchesList(idx,exact,mode); return; }
+        if(res.matches.length===1){ applyMatchToRow(idx,res.matches[0],mode); return; }
+        showMatchesList(idx,res.matches,mode);
+      }finally{ done(); }
+    });
+  });
+}
+
+function _prefix(mode){ return mode === 'cabinet' ? 'c' : ''; }
+
+function showMatchesList(idx, matches, mode){
+  const p = _prefix(mode);
+  const holder=$(p+'matches-'+idx); if(!holder) return;
+  holder.innerHTML='';
+  const list=document.createElement('div'); list.className='matchList';
+  matches.forEach(m=>{
+    const item=document.createElement('div'); item.className='matchItem';
+    item.innerHTML='<div><strong>'+esc(m.name||'-')+'</strong> — Lot:'+esc(m.lot||'-')+' — Exp:'+esc(formatDateMMDDYYYY(m.exp))+' — Qty:'+esc(m.remaining||0)+' — Loc:'+esc(m.location||'')+' — Status:'+esc(enhanceStatus(m.status,m.exp))+'</div>';
+    const btn=document.createElement('button'); btn.className='btn small'; btn.textContent='Select';
+    btn.addEventListener('click', ()=>applyMatchToRow(idx,m,mode));
+    item.appendChild(btn); list.appendChild(item);
+  });
+  holder.appendChild(list);
+}
+
+function applyMatchToRow(idx, match, mode){
+  const p = _prefix(mode);
+  const nameInput=$(p+'nameinp-'+idx), lotInput=$(p+'lotinp-'+idx), expInput=$(p+'expinp-'+idx), catInput=$(p+'catinp-'+idx);
+  const locInput=$(p+'locinp-'+idx);
+  const invQty=$(p+'invqty-'+idx), bagQty=(mode==='cabinet'?$('ccabqty-'+idx):$('bagqty-'+idx));
+  const stockInfo=$(p+'stockinfo-'+idx), scanInp=$(p+'scan-'+idx);
+  if(nameInput){ nameInput.value=match.name||''; nameInput.disabled=true; }
+  if(lotInput){ lotInput.value=match.lot||''; lotInput.disabled=true; }
+  if(expInput){ expInput.value=match.exp||''; expInput.disabled=true; }
+  if(catInput){ catInput.value=match.category||''; catInput.disabled=true; }
+  if(locInput){ locInput.value=match.location||''; locInput.disabled=true; }
+  if(invQty){ invQty.value=''; invQty.disabled=true; invQty.classList.add('gray'); }
+  if(stockInfo){ stockInfo.textContent='In stock: '+String(match.remaining??0); }
+  if(bagQty){ bagQty.disabled=false; }
+  const finalStatus=enhanceStatus(match.status,match.exp)||'OK';
+  const statusWrap=$(p+'statuswrap-'+idx);
+  if(statusWrap) statusWrap.innerHTML='<input id="'+p+'statusinp-'+idx+'" value="'+esc(finalStatus)+'" disabled style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);" />';
+  if(scanInp){
+    scanInp.dataset.row=match.row||''; scanInp.dataset.name=match.name||''; scanInp.dataset.lot=match.lot||''; scanInp.dataset.exp=match.exp||''; scanInp.dataset.category=match.category||''; scanInp.dataset.remaining=String(match.remaining??0); scanInp.dataset.location=match.location||'';
+    if(match.barcode) scanInp.dataset.barcode=match.barcode;
+    delete scanInp.dataset.scannedBarcode; delete scanInp.dataset.replaceTarget;
+  }
+  const holder=$(p+'matches-'+idx); if(holder) holder.innerHTML='';
+  if(mode === 'cabinet') maybeAddCabinetRow();
+  else maybeAddRow();
+}
+
+function setStatusCellWithReplacementUI(idx, currentStatus, replacementRequired, mode){
+  const p = _prefix(mode);
+  const wrap=$(p+'statuswrap-'+idx); if(!wrap) return;
+  const replItems = mode === 'cabinet' ? cabinetRequiredItems : requiredItems;
+  wrap.innerHTML=
+    '<input id="'+p+'statusinp-'+idx+'" value="'+esc(currentStatus||'OK')+'" disabled style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);" />'+
+    (replacementRequired?('<div style="margin-top:6px"><label class="small">Replacing item</label><select id="'+p+'replaceReq-'+idx+'"><option value="">(select)</option></select></div><div style="margin-top:8px"><button id="'+p+'addUse-'+idx+'" class="btn small">Add & Use</button></div>'):'');
+  const replaceSel=$(p+'replaceReq-'+idx);
+  if(replaceSel){
+    replaceSel.innerHTML='<option value="">(select)</option>';
+    (replItems||[]).forEach(r=>{ const opt=document.createElement('option'); opt.value=r.name||''; opt.textContent=(r.name||'')+' ('+(r.cabinetId||r.category||'')+')'; replaceSel.appendChild(opt); });
+  }
+}
+
+function updateInlineStatus(idx, mode){
+  const p = _prefix(mode);
+  const expInput=$(p+'expinp-'+idx), statusInput=$(p+'statusinp-'+idx);
+  if(!expInput||!statusInput) return;
+  statusInput.value=computeStatusFromExp(expInput.value||'');
+}
+
+function showInlineAdd(idx, scannedValue, isBarcodeScan, mode){
+  const p = _prefix(mode);
+  const input=$(p+'scan-'+idx); if(input) input.value=scannedValue;
+  const nameInput=$(p+'nameinp-'+idx), lotInput=$(p+'lotinp-'+idx), expInput=$(p+'expinp-'+idx), catInput=$(p+'catinp-'+idx);
+  const locInput=$(p+'locinp-'+idx);
+  const invQty=$(p+'invqty-'+idx), stockInfo=$(p+'stockinfo-'+idx);
+  const bagQty=(mode==='cabinet'?$('ccabqty-'+idx):$('bagqty-'+idx));
+  if(nameInput) nameInput.disabled=false;
+  if(lotInput) lotInput.disabled=false;
+  if(expInput) expInput.disabled=false;
+  if(catInput) catInput.disabled=false;
+  if(locInput){ locInput.disabled=false; locInput.value=''; }
+  if(invQty){ invQty.disabled=false; invQty.value=''; invQty.classList.remove('gray'); }
+  if(stockInfo) stockInfo.textContent='';
+  if(bagQty) bagQty.disabled=false;
+  if(isBarcodeScan){ if(nameInput) nameInput.value=''; if(lotInput) lotInput.value=''; }
+  else{
+    const numCount=(scannedValue.match(/[0-9]/g)||[]).length;
+    const letterCount=(scannedValue.match(/[A-Za-z]/g)||[]).length;
+    const putLot=numCount>letterCount;
+    if(nameInput) nameInput.value=putLot?'':scannedValue;
+    if(lotInput) lotInput.value=putLot?scannedValue:'';
+  }
+  const currentStatus=computeStatusFromExp(expInput?expInput.value:'');
+  setStatusCellWithReplacementUI(idx, currentStatus, true, mode);
+  updateInlineStatus(idx, mode);
+  if(expInput){ expInput.oninput=function(){ updateInlineStatus(idx, mode); }; expInput.onchange=function(){ updateInlineStatus(idx, mode); }; }
+
+  const replaceSel=$(p+'replaceReq-'+idx);
+  if(replaceSel){
+    replaceSel.addEventListener('change', function(){
+      const opt=this.options[this.selectedIndex]; const fullText=opt.textContent||'';
+      const parenIndex=fullText.indexOf(' (');
+      const itemName=parenIndex>-1?fullText.substring(0,parenIndex):fullText;
+      const catMatch=fullText.match(/\((.*)\)$/); const cat=catMatch?catMatch[1]:'';
+      if(itemName&&$(p+'nameinp-'+idx)) $(p+'nameinp-'+idx).value=itemName;
+      if(cat&&$(p+'catinp-'+idx)) $(p+'catinp-'+idx).value=cat;
+      const scanField=$(p+'scan-'+idx); if(scanField) scanField.dataset.replaceTarget=this.value||'';
+    });
+  }
+
+  const addUseBtn=$(p+'addUse-'+idx);
+  if(addUseBtn){
+    addUseBtn.addEventListener('click', function onClick(ev){
+      ev.preventDefault(); addUseBtn.disabled=true;
+      const originalText=addUseBtn.textContent; addUseBtn.textContent='...';
+      const newName=(nameInput&&nameInput.value||'').trim();
+      const newLot=(lotInput&&lotInput.value||'').trim();
+      const newExp=(expInput&&expInput.value||'').trim();
+      const newLoc=(locInput&&locInput.value||'').trim();
+      const replaceTarget=(replaceSel&&replaceSel.value||'').trim();
+      const categoryChosen=(catInput&&catInput.value||'').trim();
+      const invQtyVal=Number(invQty&&invQty.value||1);
+      if(!newName){ alert('Item name required'); addUseBtn.disabled=false; addUseBtn.textContent=originalText; return; }
+      if(!newLot){ alert('Lot number required'); addUseBtn.disabled=false; addUseBtn.textContent=originalText; return; }
+      if(!newExp){ alert('Expiration date required'); addUseBtn.disabled=false; addUseBtn.textContent=originalText; return; }
+      if(!invQtyVal||invQtyVal<=0){ alert('Inv Qty must be greater than 0'); addUseBtn.disabled=false; addUseBtn.textContent=originalText; return; }
+      if(!replaceTarget){ alert('Choose required item replaced'); addUseBtn.disabled=false; addUseBtn.textContent=originalText; return; }
+      if(!newLoc){ alert('Location (stockroom) is required'); addUseBtn.disabled=false; addUseBtn.textContent=originalText; return; }
+      const barcodeToSend=(input&&input.dataset.scannedBarcode)||'';
+      const payload={ name:newName, barcode:barcodeToSend, lot:newLot, exp:newExp, qty:invQtyVal, category:categoryChosen||'', location:newLoc };
+      jsonpCall('createItem', payload, function(res){
+        if(!res||res.success===false){ alert((res&&res.message)?res.message:'Create failed'); addUseBtn.disabled=false; addUseBtn.textContent=originalText; return; }
+        const finalStatus=computeStatusFromExp(newExp);
+        if(input){ input.dataset.row=res.stockRow||''; input.dataset.name=newName; input.dataset.lot=newLot; input.dataset.exp=newExp||''; input.dataset.replaceTarget=replaceTarget; input.dataset.location=newLoc; if(payload.barcode) input.dataset.barcode=payload.barcode; }
+        if(nameInput) nameInput.disabled=true;
+        if(lotInput) lotInput.disabled=true;
+        if(expInput) expInput.disabled=true;
+        if(catInput) catInput.disabled=true;
+        if(locInput){ locInput.value=newLoc; locInput.disabled=true; }
+        if(invQty){ invQty.disabled=true; invQty.value=''; invQty.classList.add('gray'); }
+        const statusWrap=$(p+'statuswrap-'+idx);
+        if(statusWrap) statusWrap.innerHTML='<input id="'+p+'statusinp-'+idx+'" value="'+esc(finalStatus)+'" disabled style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);" />';
+        const statusInp=$(p+'statusinp-'+idx); if(statusInp) statusInp.value=finalStatus;
+        if(input){ input.dataset.finalStatus=finalStatus; input.dataset.category=categoryChosen||input.dataset.category||''; }
+        if(stockInfo) stockInfo.textContent='Added to inventory';
+        const m=$(p+'matches-'+idx); if(m) m.innerHTML='';
+        if(mode === 'cabinet') maybeAddCabinetRow();
+        else maybeAddRow();
+        jsonpCall('getDashboardData', null, function(resp){ dashboardData=resp||dashboardData; renderDashboard(); });
+      });
+    }, {once:true});
+  }
+}
+
+function maybeAddRow(){
+  const rows=document.querySelectorAll('tr.restockRow');
+  if(rows.length===0){ addRestockRow(); return; }
+  const lastIndex=rows.length;
+  const lastNameCell=$('nameinp-'+lastIndex);
+  if(lastNameCell&&lastNameCell.value&&lastNameCell.value.trim()!=='') addRestockRow();
+}
+
+function collectEntries(){
+  const bag=$('bagSelect').value||''; if(!bag){ alert('Select a bag first'); return null; }
+  const rows=Array.from(document.querySelectorAll('tr.restockRow'));
+  const entries=[];
+  rows.forEach((r,i)=>{
+    const idx=i+1;
+    const scanField=$('scan-'+idx); if(!scanField) return;
+    const qtyVal=Number($('bagqty-'+idx).value||0);
+    const stockRow=scanField.dataset.row||'';
+    const name=$('nameinp-'+idx)?$('nameinp-'+idx).value.trim():(scanField.dataset.name||'');
+    const barcode=scanField.dataset.barcode||scanField.dataset.scannedBarcode||'';
+    const lot=$('lotinp-'+idx)?$('lotinp-'+idx).value.trim():(scanField.dataset.lot||'');
+    const exp=$('expinp-'+idx)?$('expinp-'+idx).value:(scanField.dataset.exp||'');
+    const category=$('catinp-'+idx)?$('catinp-'+idx).value.trim():(scanField.dataset.category||'');
+    const location=$('locinp-'+idx)?$('locinp-'+idx).value.trim():(scanField.dataset.location||'');
+    const status=$('statusinp-'+idx)?$('statusinp-'+idx).value.trim():(scanField.dataset.finalStatus||'');
+    const replaceTarget=scanField.dataset.replaceTarget||'';
+    if((stockRow||barcode||name)&&qtyVal>0) entries.push({bagId:bag,name,barcode,lot,exp,category,location,status,qty:qtyVal,row:Number(stockRow)||'',replaceTarget});
+  });
+  return entries;
+}
+
+function submitAll(){
+  const btn=$('submitAll');
+  disableButton(btn, ()=>new Promise((resolve)=>{
+    const entries=collectEntries(); if(entries===null){ resolve(); return; }
+    if(entries.length===0){ alert('No valid items to submit'); resolve(); return; }
+    jsonpCall('submitBag', entries, function(res){
+      if(!res||res.success===false){ alert((res&&res.message)?res.message:'Submit failed'); resolve(); return; }
+      alert(res.message||'Submitted'); initRestockRows(); refreshAll(); resolve();
+    });
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CABINET RESTOCK
+// ═══════════════════════════════════════════════════════════════════════════════
+function getSelectedCabinetLocation(){
+  return ($('cabinetStockLocation') ? $('cabinetStockLocation').value : '') || '';
+}
+
+function initCabinetRestockRows(){
+  const tbody=$('cabinetRestockBody'); if(!tbody) return;
+  tbody.innerHTML='';
+  // Load items for selected cabinet
+  const cabId = $('cabinetSelect') ? $('cabinetSelect').value : '';
+  if(!cabId){
+    // just add empty rows
+    addCabinetRow([]); addCabinetRow([]);
+    return;
+  }
+  jsonpCall('getCabinetRequiredItems', {cabinetId: cabId}, function(items){
+    cabinetRequiredItems = items || [];
+    tbody.innerHTML='';
+    // Pre-populate one row per required item
+    if(cabinetRequiredItems.length > 0){
+      cabinetRequiredItems.forEach(req => {
+        addCabinetRow(cabinetRequiredItems, req.name);
+      });
+    } else {
+      addCabinetRow([]); addCabinetRow([]);
+    }
+  });
+}
+
+function addCabinetRow(items, presetName){
+  const tbody=$('cabinetRestockBody');
+  const idx=tbody.querySelectorAll('tr.cabinetRestockRow').length+1;
+  const tr=document.createElement('tr'); tr.className='cabinetRestockRow'; tr.id='cabrow-'+idx;
+  tr.innerHTML=
+    '<td data-label="Scan / Lot # / Name"><div class="scanWrap"><input id="cscan-'+idx+'" placeholder="Scan barcode or enter lot/name" /><button id="csearch-'+idx+'" class="btn small secondary searchActionBtn">🔍</button><button id="ccam-'+idx+'" class="cameraBtn">📷</button></div><div id="cmatches-'+idx+'"></div></td>'+
+    '<td data-label="Item Name"><input id="cnameinp-'+idx+'" /></td>'+
+    '<td data-label="Lot"><input id="clotinp-'+idx+'" /></td>'+
+    '<td data-label="Expiration"><input type="date" id="cexpinp-'+idx+'" /></td>'+
+    '<td data-label="Category"><input id="ccatinp-'+idx+'" /></td>'+
+    '<td data-label="Location"><input id="clocinp-'+idx+'" class="gray" disabled /></td>'+
+    '<td data-label="Inv Qty"><input id="cinvqty-'+idx+'" type="number" min="0" value="" class="gray" disabled /><div id="cstockinfo-'+idx+'" class="small" style="margin-top:4px"></div></td>'+
+    '<td data-label="Cabinet Qty"><input id="ccabqty-'+idx+'" type="number" min="0" value="1" style="width:84px" /></td>'+
+    '<td data-label="Status"><div id="cstatuswrap-'+idx+'"></div></td>';
+  tbody.appendChild(tr);
+  if(presetName){ $('cnameinp-'+idx).value = presetName; }
+  $('csearch-'+idx).addEventListener('click', ()=>rowLookup(idx, 'cabinet'));
+  $('cscan-'+idx).addEventListener('keydown', ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); rowLookup(idx, 'cabinet'); } });
+  $('ccam-'+idx).addEventListener('click', ()=>openRowScanner(idx, 'cabinet'));
+}
+
+function maybeAddCabinetRow(){
+  const rows=document.querySelectorAll('tr.cabinetRestockRow');
+  if(rows.length===0){ addCabinetRow(cabinetRequiredItems); return; }
+  const lastIndex=rows.length;
+  const lastNameCell=$('cnameinp-'+lastIndex);
+  if(lastNameCell&&lastNameCell.value&&lastNameCell.value.trim()!=='') addCabinetRow(cabinetRequiredItems);
+}
+
+function collectCabinetEntries(){
+  const vehicleId=$('cabinetVehicleSelect').value||''; if(!vehicleId){ alert('Select a vehicle first'); return null; }
+  const cabinetId=$('cabinetSelect').value||''; if(!cabinetId){ alert('Select a cabinet first'); return null; }
+  const rows=Array.from(document.querySelectorAll('tr.cabinetRestockRow'));
+  const entries=[];
+  rows.forEach((r,i)=>{
+    const idx=i+1;
+    const scanField=$('cscan-'+idx); if(!scanField) return;
+    const qtyVal=Number($('ccabqty-'+idx)?$('ccabqty-'+idx).value||0:0);
+    const stockRow=scanField.dataset.row||'';
+    const name=$('cnameinp-'+idx)?$('cnameinp-'+idx).value.trim():(scanField.dataset.name||'');
+    const barcode=scanField.dataset.barcode||scanField.dataset.scannedBarcode||'';
+    const lot=$('clotinp-'+idx)?$('clotinp-'+idx).value.trim():(scanField.dataset.lot||'');
+    const exp=$('cexpinp-'+idx)?$('cexpinp-'+idx).value:(scanField.dataset.exp||'');
+    const category=$('ccatinp-'+idx)?$('ccatinp-'+idx).value.trim():(scanField.dataset.category||'');
+    const location=$('clocinp-'+idx)?$('clocinp-'+idx).value.trim():(scanField.dataset.location||'');
+    const status=$('cstatusinp-'+idx)?$('cstatusinp-'+idx).value.trim():(scanField.dataset.finalStatus||'');
+    const replaceTarget=scanField.dataset.replaceTarget||'';
+    if((stockRow||barcode||name)&&qtyVal>0) entries.push({vehicleId,cabinetId,name,barcode,lot,exp,category,location,status,qty:qtyVal,row:Number(stockRow)||'',replaceTarget});
+  });
+  return entries;
+}
+
+function cabinetSubmitAll(){
+  const btn=$('cabinetSubmitAll');
+  disableButton(btn, ()=>new Promise((resolve)=>{
+    const entries=collectCabinetEntries(); if(entries===null){ resolve(); return; }
+    if(entries.length===0){ alert('No valid items to submit'); resolve(); return; }
+    jsonpCall('submitVehicleCabinet', entries, function(res){
+      if(!res||res.success===false){ alert((res&&res.message)?res.message:'Submit failed'); resolve(); return; }
+      alert(res.message||'Submitted'); initCabinetRestockRows(); refreshAll(); resolve();
+    });
+  }));
+}
+
+// ── Narc Kit rows ─────────────────────────────────────────────────────────────
+function initNarcKitRows(){
+  const tbody=$('narcKitBody'); if(!tbody) return;
+  tbody.innerHTML='';
+  addNarcKitRow(); addNarcKitRow();
+}
+function populateNarcKitNameSelect(sel, preselect){
+  if(!sel) return;
+  sel.innerHTML='<option value="">-- select --</option>';
+  (narcLookups.narcNames||[]).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
+  if(preselect&&(narcLookups.narcNames||[]).includes(preselect)) sel.value=preselect;
+}
+function addNarcKitRow(){
+  const tbody=$('narcKitBody');
+  const idx=tbody.querySelectorAll('tr.narcKitRow').length+1;
+  const tr=document.createElement('tr'); tr.className='narcKitRow'; tr.id='narcKitRow-'+idx;
+  tr.innerHTML=
+    '<td data-label="Scan / Lot # / Name"><div class="scanWrap"><input id="nscan-'+idx+'" placeholder="Scan barcode / lot / name" /><button id="nsearch-'+idx+'" class="btn small secondary searchActionBtn">🔍</button><button id="ncam-'+idx+'" class="cameraBtn">📷</button></div><div id="nmatch-'+idx+'"></div></td>'+
+    '<td data-label="Narc Name"><select id="nname-'+idx+'"></select></td>'+
+    '<td data-label="Lot"><input id="nlot-'+idx+'"/></td>'+
+    '<td data-label="Expiration"><input id="nexp-'+idx+'" type="date"/></td>'+
+    '<td data-label="Inv Qty"><input id="ninv-'+idx+'" type="number" class="gray" disabled /></td>'+
+    '<td data-label="Kit Qty"><input id="nkitqty-'+idx+'" type="number" min="0" value="1"/></td>'+
+    '<td data-label="Status"><input id="nstat-'+idx+'" disabled /></td>';
+  tbody.appendChild(tr);
+  populateNarcKitNameSelect($('nname-'+idx));
+  $('nsearch-'+idx).addEventListener('click', ()=>narcKitLookup(idx));
+  $('nscan-'+idx).addEventListener('keydown', ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); narcKitLookup(idx); } });
+  $('ncam-'+idx).addEventListener('click', ()=>openNarcKitScanner(idx));
+  $('nname-'+idx).addEventListener('change', function(){ const scan=$('nscan-'+idx); if(scan) scan.dataset.name=this.value||''; });
+}
+function openNarcKitScanner(idx){
+  const row=$('narcKitRow-'+idx); if(!row) return;
+  document.querySelectorAll('.rowScannerContainer').forEach(o=>o.remove());
+  stopScanner();
+  const container=document.createElement('div');
+  container.className='rowScannerContainer readerContainer'; container.id='narcRowScannerContainer-'+idx;
+  container.innerHTML='<div class="scannerBox" id="narcRowScannerBox-'+idx+'"><div style="color:#fff">Camera preview</div></div><button class="closeCam" id="narcRowScannerClose-'+idx+'">✕</button><div id="narcRowScannerStatus-'+idx+'" class="statusMsg"></div>';
+  row.parentNode.insertBefore(container, row.nextSibling);
+  $('narcRowScannerClose-'+idx).addEventListener('click', stopScanner);
+  startScannerHtml5('narcRowScannerBox-'+idx,'nscan-'+idx,'narcRowScannerContainer-'+idx,'narcRowScannerStatus-'+idx,'narcRowScannerClose-'+idx);
+}
+function narcKitLookup(idx){
+  const btn=$('nsearch-'+idx), input=$('nscan-'+idx);
+  const q=(input.value||'').trim(); if(!q){ alert('Type or scan something first'); return; }
+  const loc=$('narcLocation').value||'Bronxcare';
+  withSearchBusy(btn, (done)=>{
+    jsonpCall('searchNarcStock', {q,location:loc}, function(res){
+      try{
+        const holder=$('nmatch-'+idx); if(holder) holder.innerHTML='';
+        if(!res||!res.found||!res.matches||res.matches.length===0){ showNarcKitInline(idx,q); return; }
+        const code=q.toLowerCase();
+        const exact=res.matches.filter(m=>String(m.barcode||'').trim().toLowerCase()===code);
+        if(exact.length===1){ applyNarcKitMatch(idx,exact[0]); return; }
+        if(exact.length>1){ showNarcKitMatches(idx,exact); return; }
+        if(res.matches.length===1){ applyNarcKitMatch(idx,res.matches[0]); return; }
+        showNarcKitMatches(idx,res.matches);
+      }finally{ done(); }
+    });
+  });
+}
+function showNarcKitMatches(idx, matches){
+  const holder=$('nmatch-'+idx); if(!holder) return;
+  holder.innerHTML='';
+  const list=document.createElement('div'); list.className='matchList';
+  matches.forEach(m=>{
+    const item=document.createElement('div'); item.className='matchItem';
+    item.innerHTML='<div><strong>'+esc(m.name||'-')+'</strong> — Lot:'+esc(m.lot||'-')+' — Exp:'+esc(formatDateMMDDYYYY(m.exp))+' — Qty:'+esc(m.qty||0)+' — Status:'+esc(enhanceStatus(m.status,m.exp))+'</div>';
+    const btn=document.createElement('button'); btn.className='btn small'; btn.textContent='Select';
+    btn.addEventListener('click', ()=>applyNarcKitMatch(idx,m));
+    item.appendChild(btn); list.appendChild(item);
+  });
+  holder.appendChild(list);
+}
+function applyNarcKitMatch(idx, match){
+  const name=$('nname-'+idx), lot=$('nlot-'+idx), exp=$('nexp-'+idx), inv=$('ninv-'+idx), stat=$('nstat-'+idx), scan=$('nscan-'+idx);
+  populateNarcKitNameSelect(name, match.name);
+  if(name){ name.value=match.name||''; name.disabled=true; }
+  if(lot){ lot.value=match.lot||''; lot.disabled=true; }
+  if(exp){ exp.value=match.exp||''; exp.disabled=true; }
+  if(inv){ inv.value=String(match.qty??0); inv.disabled=true; inv.classList.add('gray'); }
+  if(stat){ stat.value=enhanceStatus(match.status,match.exp)||'OK'; }
+  if(scan){ scan.dataset.barcode=match.barcode||''; scan.dataset.name=match.name||''; scan.dataset.lot=match.lot||''; scan.dataset.exp=match.exp||''; scan.dataset.qty=match.qty||''; }
+  if($('nmatch-'+idx)) $('nmatch-'+idx).innerHTML='';
+  maybeAddNarcKitRow();
+}
+function showNarcKitInline(idx, scannedValue){
+  const name=$('nname-'+idx), lot=$('nlot-'+idx), exp=$('nexp-'+idx), inv=$('ninv-'+idx), stat=$('nstat-'+idx), scan=$('nscan-'+idx);
+  populateNarcKitNameSelect(name);
+  if(name){ name.disabled=false; if(scannedValue&&(narcLookups.narcNames||[]).includes(scannedValue)) name.value=scannedValue; else name.value=''; }
+  if(lot) lot.disabled=false;
+  if(exp) exp.disabled=false;
+  if(inv){ inv.disabled=true; inv.classList.add('gray'); inv.value=''; }
+  if(stat) stat.value=computeStatusFromExp(exp?exp.value:'');
+  if(scan){ delete scan.dataset.barcode; delete scan.dataset.name; delete scan.dataset.lot; delete scan.dataset.exp; }
+  if(exp){ exp.oninput=function(){ if(stat) stat.value=computeStatusFromExp(exp.value||''); }; }
+}
+function maybeAddNarcKitRow(){
+  const rows=document.querySelectorAll('tr.narcKitRow');
+  if(rows.length===0){ addNarcKitRow(); return; }
+  const lastIndex=rows.length;
+  const lastInput=$('nname-'+lastIndex);
+  if(lastInput&&lastInput.value&&lastInput.value.trim()!=='') addNarcKitRow();
+}
+function collectNarcKitEntries(){
+  const kitId=$('narcKitSelect').value||''; if(!kitId){ alert('Select a Narc Kit ID first'); return null; }
+  const rows=Array.from(document.querySelectorAll('tr.narcKitRow'));
+  const entries=[], loc=$('narcLocation').value||'Bronxcare';
+  rows.forEach((r,i)=>{
+    const idx=i+1; const scan=$('nscan-'+idx); if(!scan) return;
+    const qty=Number($('nkitqty-'+idx).value||0);
+    const name=$('nname-'+idx)?$('nname-'+idx).value.trim():'';
+    const barcode=scan.dataset.barcode||'';
+    const lot=$('nlot-'+idx)?$('nlot-'+idx).value.trim():'';
+    const exp=$('nexp-'+idx)?$('nexp-'+idx).value:'';
+    const status=$('nstat-'+idx)?$('nstat-'+idx).value.trim():'';
+    if((name||barcode||lot)&&qty>0) entries.push({kitId,location:loc,name,barcode,lot,exp,qty,status});
+  });
+  return entries;
+}
+function submitNarcKitClient(){
+  const btn=$('narcKitSubmitAll');
+  disableButton(btn, ()=>new Promise((resolve)=>{
+    const entries=collectNarcKitEntries(); if(entries===null){ resolve(); return; }
+    if(entries.length===0){ alert('No valid items to submit'); resolve(); return; }
+    jsonpCall('submitNarcKit', entries, function(res){
+      if(!res||res.success===false){ alert((res&&res.message)?res.message:'Submit failed'); resolve(); return; }
+      alert(res.message||'Submitted'); initNarcKitRows(); refreshAll(); resolve();
+    });
+  }));
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.onload = function(){
+  $('btnDashboard').addEventListener('click', ()=>showCard('dashboardCard'));
+  $('btnCreate').addEventListener('click', ()=>showCard('createCard'));
+  $('btnEquipment').addEventListener('click', ()=>showCard('equipmentCard'));
+  $('btnRestock').addEventListener('click', ()=>showCard('bagCard'));
+  $('btnCabinet').addEventListener('click', ()=>showCard('cabinetCard'));
+  $('btnNarcotics').addEventListener('click', ()=>showCard('narcoticsCard'));
+  $('btnSignOut').addEventListener('click', signOutUser);
+
+  $('dashboardViewSelect').addEventListener('change', onDashboardViewToggle);
+
+  $('dashboardBagSelect').addEventListener('change', function(){
+    dashTransition_(function(done){ renderDashboardBags(done); });
+  });
+  $('dashboardVehicleSelect').addEventListener('change', function(){
+    dashTransition_(function(done){ renderDashboardVehicles(done); });
+  });
+  $('dashboardNarcKitSelect').addEventListener('change', function(){
+    dashTransition_(function(done){ renderDashboardKits(done); });
+  });
+
+  if($('narcVerifySelect')) $('narcVerifySelect').addEventListener('change', ()=>loadNarcVerifyRows());
+  $('hideExpired').addEventListener('change', renderDashboard);
+  $('hideOutOfStock').addEventListener('change', renderDashboard);
+  $('createCloseCam').addEventListener('click', stopScanner);
+  $('equipmentCloseCam').addEventListener('click', stopScanner);
+  $('createSave').addEventListener('click', createItemClient);
+  $('createClear').addEventListener('click', clearCreateForm);
+  $('createCategory').addEventListener('change', ()=>populateReqDatalist($('createCategory').value||''));
+  $('resetRows').addEventListener('click', initRestockRows);
+  $('submitAll').addEventListener('click', submitAll);
+
+  // Cabinet restock wiring
+  $('cabinetSelect').addEventListener('change', initCabinetRestockRows);
+  $('cabinetResetRows').addEventListener('click', initCabinetRestockRows);
+  $('cabinetSubmitAll').addEventListener('click', cabinetSubmitAll);
+
+  $('equipmentSearchBtn').classList.add('searchActionBtn');
+  $('equipmentSearchBtn').addEventListener('click', searchEquipmentClient);
+  $('equipmentSave').addEventListener('click', saveEquipmentClient);
+  $('equipmentClear').addEventListener('click', clearEquipmentForm);
+  $('equipmentCurrentStatus').addEventListener('change', updateEquipmentStatusUI);
+
+  $('narcMode').addEventListener('change', function(){ toggleNarcMode(); if(this.value==='verify') loadNarcVerifyRows(); });
+  $('narcLocation').addEventListener('change', loadNarcLookups);
+  $('saveNarcBtn').addEventListener('click', saveNarcClient);
+  $('clearNarcBtn').addEventListener('click', clearNarcForm);
+  $('narcKitResetRows').addEventListener('click', initNarcKitRows);
+  $('narcKitSubmitAll').addEventListener('click', submitNarcKitClient);
+  if($('narcVerifyResetRows')) $('narcVerifyResetRows').addEventListener('click', loadNarcVerifyRows);
+  if($('narcVerifySubmitAll')) $('narcVerifySubmitAll').addEventListener('click', submitNarcVerifyClient);
+
+  $('createCameraBtn').addEventListener('click', ()=>{
+    const wrap=$('createScanner');
+    if(wrap.classList.contains('active')) return stopScanner();
+    startScannerHtml5('createScannerBox','createBarcode','createScanner','createScannerStatus','createCloseCam');
+  });
+  $('equipmentCameraBtn').addEventListener('click', ()=>{
+    const wrap=$('equipmentScanner');
+    if(wrap.classList.contains('active')) return stopScanner();
+    startScannerHtml5('equipmentScannerBox','equipmentBarcode','equipmentScanner','equipmentScannerStatus','equipmentCloseCam');
+  });
+  $('narcCameraBtn').addEventListener('click', ()=>{
+    const wrap=$('createScanner');
+    if(wrap.classList.contains('active')) return stopScanner();
+    startScannerHtml5('createScannerBox','narcBarcode','createScanner','createScannerStatus','createCloseCam');
+  });
+  $('btnRefresh').addEventListener('click', function(){
+    disableButton(this, ()=>new Promise((resolve)=>{
+      jsonpCall('syncInventoryStock', null, function(){ setTimeout(()=>{ location.reload(); resolve(); }, 400); });
+    }));
+  });
+
+  if($('narcMode')&&!$('narcMode').value) $('narcMode').value='create';
+  toggleNarcMode();
+  loadNarcLookups();
+
+  function initGoogle(){
+    if(window.google&&google.accounts&&google.accounts.id){
+      try{
+        google.accounts.id.initialize({ client_id:'225540626175-ijteecu232e4sudp76tkdf2tnd7n7gmt.apps.googleusercontent.com', callback:handleSignIn, auto_select:false, cancel_on_tap_outside:true });
+        google.accounts.id.renderButton(document.getElementById('btnSignIn'),{theme:'outline',size:'medium',text:'signin_with'});
+      }catch(e){ console.error('Google init error:',e); }
+    }else{ setTimeout(initGoogle,200); }
+  }
+  initGoogle();
+
+  if(googleToken){
+    jsonpCall('verifyToken', {token:googleToken}, function(resp){
+      if(resp&&resp.email&&resp.email!=='unknown'){
+        currentUser=resp.email; updateUserUI(resp.email); showCard('dashboardCard'); refreshAll();
+      }else{
+        googleToken=null; localStorage.removeItem('als_google_token'); updateUserUI(null);
+      }
+    });
+  }else{ updateUserUI(null); }
+};
+</script>
+</body>
+</html>
