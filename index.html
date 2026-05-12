@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ALS & BLS Inventory — Web App v2.10</title>
+  <title>ALS Inventory — Web App v2.10</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -101,6 +101,7 @@
       <button id="btnCabinet" class="btn">Cabinet Restock</button>
       <button id="btnEquipment" class="btn">Equipment Inventory</button>
       <button id="btnNarcotics" class="btn">Narcotics</button>
+      <button id="btnTransfer" class="btn">Stock Transfer</button>
       <button id="btnRefresh" class="btn secondary">Refresh</button>
     </div>
   </div>
@@ -315,6 +316,106 @@
       <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
         <button id="cabinetResetRows" class="btn secondary">Reset rows</button>
         <button id="cabinetSubmitAll" class="btn">Submit All</button>
+      </div>
+    </div>
+
+    <!-- ── STOCK TRANSFER ── -->
+    <div id="transferCard" class="card" style="display:none">
+      <h3>Stock Transfer</h3>
+      <div class="instruction">
+        <p><strong>Instructions:</strong><br>
+         &bull; Search for an item by name, barcode, or lot number.<br>
+         &bull; Select the specific item row you want to transfer (showing current location and qty).<br>
+         &bull; Choose the <strong>Destination Location</strong> to move stock into.<br>
+         &bull; Enter the <strong>Quantity</strong> to transfer.<br>
+         &bull; Optionally add a note explaining the reason.<br>
+         &bull; Press <strong>Transfer</strong> to confirm. Stock will be deducted from the source and added to the destination.</p>
+      </div>
+
+      <!-- Search row -->
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+        <div style="flex:1;min-width:220px">
+          <label>Search Item (name / barcode / lot)</label>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <input id="transferSearch" placeholder="Type to search..." />
+            <button id="transferSearchBtn" class="btn small secondary searchActionBtn">🔍</button>
+          </div>
+        </div>
+        <div style="min-width:180px">
+          <label>Filter by Location</label>
+          <select id="transferFromFilter" style="margin-top:4px"><option value="">-- all locations --</option></select>
+        </div>
+      </div>
+
+      <!-- Results table -->
+      <div id="transferResultsWrap" style="display:none;margin-bottom:16px">
+        <div class="tableWrap" style="margin-top:0">
+          <table>
+            <thead><tr>
+              <th>Select</th><th>Item Name</th><th>Barcode</th><th>Lot</th>
+              <th>Expiration</th><th>Category</th><th>Location</th><th>Available Qty</th><th>Status</th>
+            </tr></thead>
+            <tbody id="transferResultsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Transfer form — shown after selection -->
+      <div id="transferFormWrap" style="display:none;border:1px solid var(--border);border-radius:10px;padding:16px;background:#f9fafc;margin-bottom:16px">
+        <div style="font-weight:700;margin-bottom:12px;color:#1e293b">📦 Transfer Details</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+          <div>
+            <label>Item</label>
+            <input id="transferItemDisplay" disabled style="background:#f3f6fb;font-weight:600" />
+          </div>
+          <div>
+            <label>Lot</label>
+            <input id="transferLotDisplay" disabled style="background:#f3f6fb" />
+          </div>
+          <div>
+            <label>Expiration</label>
+            <input id="transferExpDisplay" disabled style="background:#f3f6fb" />
+          </div>
+          <div>
+            <label>From Location</label>
+            <input id="transferFromDisplay" disabled style="background:#f3f6fb;color:#0b5fff;font-weight:600" />
+          </div>
+          <div>
+            <label>Available Qty</label>
+            <input id="transferAvailDisplay" disabled style="background:#f3f6fb" />
+          </div>
+          <div>
+            <label>To Location <span style="color:#dc2626">*</span></label>
+            <select id="transferToLocation"><option value="">-- select destination --</option></select>
+          </div>
+          <div>
+            <label>Quantity to Transfer <span style="color:#dc2626">*</span></label>
+            <input id="transferQty" type="number" min="1" value="1" />
+          </div>
+          <div>
+            <label>Notes (optional)</label>
+            <input id="transferNotes" placeholder="Reason for transfer..." />
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button id="transferConfirmBtn" class="btn">Transfer</button>
+          <button id="transferCancelBtn" class="btn secondary">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Transfer history -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+        <div style="font-weight:700;color:#1e293b">Recent Transfers</div>
+        <button id="transferRefreshLog" class="btn small secondary">Refresh Log</button>
+      </div>
+      <div class="tableWrap" style="margin-top:0">
+        <table>
+          <thead><tr>
+            <th>Timestamp</th><th>By</th><th>Item</th><th>Lot</th>
+            <th>From</th><th>To</th><th>Qty</th><th>Notes</th>
+          </tr></thead>
+          <tbody id="transferLogBody"><tr><td colspan="8" class="small">Loading...</td></tr></tbody>
+        </table>
       </div>
     </div>
 
@@ -540,7 +641,7 @@ function showDashSpinner_(cols, msg){
 
 // ── Card switching ────────────────────────────────────────────────────────────
 function showCard(id){
-  ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard'].forEach(c => {
+  ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard','transferCard'].forEach(c => {
     const el = $(c);
     if(el) el.style.display = (c===id) ? 'block' : 'none';
   });
@@ -553,6 +654,10 @@ function showCard(id){
   if(id === 'cabinetCard'){
     initCabinetRestockRows();
   }
+  if(id === 'transferCard'){
+    loadTransferLog();
+    populateTransferFilters();
+  }
   stopScanner();
 }
 
@@ -560,11 +665,11 @@ function updateUserUI(email){
   const el = $('currentUser');
   if(email === null || email === undefined){
     el.textContent = 'Signed Out';
-    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = true; });
-    ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard'].forEach(id => { const card = $(id); if(card) card.style.display = 'none'; });
+    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnTransfer','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = true; });
+    ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard','transferCard'].forEach(id => { const card = $(id); if(card) card.style.display = 'none'; });
   }else{
     el.textContent = email;
-    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = false; });
+    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnTransfer','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = false; });
   }
 }
 
@@ -1630,6 +1735,155 @@ function submitNarcKitClient(){
   }));
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STOCK TRANSFER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let _transferSelected = null;
+
+function showTransferCard(){
+  showCard('transferCard');
+  loadTransferLog();
+  populateTransferFilters();
+}
+
+function populateTransferFilters(){
+  const fromFilter = $('transferFromFilter');
+  const toSel      = $('transferToLocation');
+  [fromFilter, toSel].forEach((s, idx) => {
+    if(!s) return;
+    const cur = s.value;
+    s.innerHTML = idx === 0 ? '<option value="">-- all locations --</option>' : '<option value="">-- select destination --</option>';
+    (locationList||[]).forEach(l => { const o = document.createElement('option'); o.value = l; o.textContent = l; s.appendChild(o); });
+    if(cur) s.value = cur;
+  });
+}
+
+function loadTransferLog(){
+  const tbody = $('transferLogBody');
+  if(!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" class="small">Loading...</td></tr>';
+  jsonpCall('getTransferLog', { limit: 50 }, function(rows){
+    tbody.innerHTML = '';
+    if(!rows || !rows.length){
+      tbody.innerHTML = '<tr><td colspan="8" class="small">No transfers yet</td></tr>';
+      return;
+    }
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + esc(r.timestamp||'') + '</td>' +
+        '<td>' + esc((r.transferredBy||'').replace(/@.*$/,'')) + '</td>' +
+        '<td><strong>' + esc(r.name||'') + '</strong>' + (r.barcode ? '<br><span class=\"small\">' + esc(r.barcode) + '</span>' : '') + '</td>' +
+        '<td>' + esc(r.lot||'—') + '</td>' +
+        '<td>' + esc(r.fromLocation||'') + '</td>' +
+        '<td>' + esc(r.toLocation||'') + '</td>' +
+        '<td style="font-weight:700;color:#0b5fff">' + esc(String(r.qty||0)) + '</td>' +
+        '<td>' + esc(r.notes||'—') + '</td>';
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+function runTransferSearch(){
+  const btn = $('transferSearchBtn');
+  const q   = ($('transferSearch').value||'').trim();
+  const loc = ($('transferFromFilter').value||'').trim();
+  if(!q){ alert('Enter an item name, barcode, or lot to search'); return; }
+  withSearchBusy(btn, (done) => {
+    jsonpCall('getItem', { q, filterInvalid: false, location: loc }, function(res){
+      try{
+        const wrap     = $('transferResultsWrap');
+        const tbody    = $('transferResultsBody');
+        const formWrap = $('transferFormWrap');
+        _transferSelected = null;
+        if(formWrap) formWrap.style.display = 'none';
+        if(!res || !res.found || !res.matches || !res.matches.length){
+          tbody.innerHTML = '<tr><td colspan="9" class="small">No items found</td></tr>';
+          wrap.style.display = 'block';
+          return;
+        }
+        tbody.innerHTML = '';
+        res.matches.forEach(m => {
+          const tr = document.createElement('tr');
+          const statusColor = m.status === 'Expired' ? '#dc2626' : m.status === 'Expiring Soon' ? '#b45309' : '#16a34a';
+          tr.innerHTML =
+            '<td><button class="btn small" style="white-space:nowrap">Select</button></td>' +
+            '<td><strong>' + esc(m.name) + '</strong></td>' +
+            '<td>' + esc(m.barcode||'—') + '</td>' +
+            '<td>' + esc(m.lot||'—') + '</td>' +
+            '<td>' + esc(formatDateMMDDYYYY(m.exp)) + '</td>' +
+            '<td>' + esc(m.category||'—') + '</td>' +
+            '<td style="font-weight:600;color:#0b5fff">' + esc(m.location||'—') + '</td>' +
+            '<td style="font-weight:700">' + esc(String(m.remaining||0)) + '</td>' +
+            '<td style="color:' + statusColor + ';font-weight:600">' + esc(enhanceStatus(m.status,m.exp)||'OK') + '</td>';
+          tr.querySelector('button').addEventListener('click', () => selectTransferItem(m));
+          tbody.appendChild(tr);
+        });
+        wrap.style.display = 'block';
+      } finally { done(); }
+    });
+  });
+}
+
+function selectTransferItem(match){
+  _transferSelected = match;
+  $('transferItemDisplay').value  = match.name || '';
+  $('transferLotDisplay').value   = match.lot  || '';
+  $('transferExpDisplay').value   = formatDateMMDDYYYY(match.exp) || '';
+  $('transferFromDisplay').value  = match.location || '';
+  $('transferAvailDisplay').value = String(match.remaining || 0);
+  $('transferQty').value          = 1;
+  $('transferQty').max            = match.remaining || 1;
+  $('transferNotes').value        = '';
+  const toSel = $('transferToLocation');
+  toSel.innerHTML = '<option value="">-- select destination --</option>';
+  (locationList||[]).forEach(l => {
+    if(_normalize_(l) === _normalize_(match.location||'')) return;
+    const o = document.createElement('option'); o.value = l; o.textContent = l; toSel.appendChild(o);
+  });
+  $('transferFormWrap').style.display = 'block';
+  $('transferFormWrap').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function confirmTransfer(){
+  const btn = $('transferConfirmBtn');
+  if(!_transferSelected){ alert('Select an item first'); return; }
+  const toLocation = ($('transferToLocation').value||'').trim();
+  const qty        = Number($('transferQty').value||0);
+  const notes      = ($('transferNotes').value||'').trim();
+  if(!toLocation){ alert('Select a destination location'); return; }
+  if(qty <= 0)   { alert('Quantity must be greater than 0'); return; }
+  if(qty > _transferSelected.remaining){ alert('Quantity exceeds available stock (' + _transferSelected.remaining + ')'); return; }
+  if(!confirm('Transfer ' + qty + ' unit(s) of "' + _transferSelected.name + '" from ' + _transferSelected.location + ' to ' + toLocation + '?')) return;
+  disableButton(btn, () => new Promise((resolve) => {
+    const payload = {
+      name        : _transferSelected.name,
+      barcode     : _transferSelected.barcode || '',
+      lot         : _transferSelected.lot     || '',
+      exp         : _transferSelected.exp     || '',
+      category    : _transferSelected.category|| '',
+      fromLocation: _transferSelected.location,
+      toLocation,
+      qty,
+      notes
+    };
+    jsonpCall('transferStock', payload, function(res){
+      if(!res || res.success === false){ alert((res && res.message) ? res.message : 'Transfer failed'); resolve(); return; }
+      alert(res.message || 'Transfer complete');
+      _transferSelected = null;
+      $('transferFormWrap').style.display = 'none';
+      $('transferResultsWrap').style.display = 'none';
+      $('transferSearch').value = '';
+      $('transferFromFilter').value = '';
+      loadTransferLog();
+      refreshAll();
+      resolve();
+    });
+  }));
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 window.onload = function(){
   $('btnDashboard').addEventListener('click', ()=>showCard('dashboardCard'));
@@ -1638,6 +1892,7 @@ window.onload = function(){
   $('btnRestock').addEventListener('click', ()=>showCard('bagCard'));
   $('btnCabinet').addEventListener('click', ()=>showCard('cabinetCard'));
   $('btnNarcotics').addEventListener('click', ()=>showCard('narcoticsCard'));
+  $('btnTransfer').addEventListener('click', ()=>showCard('transferCard'));
   $('btnSignOut').addEventListener('click', signOutUser);
 
   $('dashboardViewSelect').addEventListener('change', onDashboardViewToggle);
@@ -1698,6 +1953,16 @@ window.onload = function(){
     if(wrap.classList.contains('active')) return stopScanner();
     startScannerHtml5('createScannerBox','narcBarcode','createScanner','createScannerStatus','createCloseCam');
   });
+  // Transfer card listeners
+  $('transferSearchBtn').addEventListener('click', runTransferSearch);
+  $('transferSearch').addEventListener('keydown', function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); runTransferSearch(); } });
+  $('transferConfirmBtn').addEventListener('click', confirmTransfer);
+  $('transferCancelBtn').addEventListener('click', function(){
+    _transferSelected = null;
+    $('transferFormWrap').style.display = 'none';
+  });
+  $('transferRefreshLog').addEventListener('click', loadTransferLog);
+
   $('btnRefresh').addEventListener('click', function(){
     disableButton(this, ()=>new Promise((resolve)=>{
       jsonpCall('syncInventoryStock', null, function(){ setTimeout(()=>{ location.reload(); resolve(); }, 400); });
