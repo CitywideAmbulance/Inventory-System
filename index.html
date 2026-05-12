@@ -1793,36 +1793,36 @@ function runTransferSearch(){
   if(!q){ alert('Enter an item name, barcode, or lot to search'); return; }
   withSearchBusy(btn, (done) => {
     jsonpCall('getItem', { q, filterInvalid: false, location: loc }, function(res){
-      try{
-        const wrap     = $('transferResultsWrap');
-        const tbody    = $('transferResultsBody');
-        const formWrap = $('transferFormWrap');
-        _transferSelected = null;
-        if(formWrap) formWrap.style.display = 'none';
-        if(!res || !res.found || !res.matches || !res.matches.length){
-          tbody.innerHTML = '<tr><td colspan="9" class="small">No items found</td></tr>';
-          wrap.style.display = 'block';
-          return;
-        }
-        tbody.innerHTML = '';
-        res.matches.forEach(m => {
-          const tr = document.createElement('tr');
-          const statusColor = m.status === 'Expired' ? '#dc2626' : m.status === 'Expiring Soon' ? '#b45309' : '#16a34a';
-          tr.innerHTML =
-            '<td><button class="btn small" style="white-space:nowrap">Select</button></td>' +
-            '<td><strong>' + esc(m.name) + '</strong></td>' +
-            '<td>' + esc(m.barcode||'—') + '</td>' +
-            '<td>' + esc(m.lot||'—') + '</td>' +
-            '<td>' + esc(formatDateMMDDYYYY(m.exp)) + '</td>' +
-            '<td>' + esc(m.category||'—') + '</td>' +
-            '<td style="font-weight:600;color:#0b5fff">' + esc(m.location||'—') + '</td>' +
-            '<td style="font-weight:700">' + esc(String(m.remaining||0)) + '</td>' +
-            '<td style="color:' + statusColor + ';font-weight:600">' + esc(enhanceStatus(m.status,m.exp)||'OK') + '</td>';
-          tr.querySelector('button').addEventListener('click', () => selectTransferItem(m));
-          tbody.appendChild(tr);
-        });
+      const wrap     = $('transferResultsWrap');
+      const tbody    = $('transferResultsBody');
+      const formWrap = $('transferFormWrap');
+      _transferSelected = null;
+      if(formWrap) formWrap.style.display = 'none';
+      if(!res || !res.found || !res.matches || !res.matches.length){
+        tbody.innerHTML = '<tr><td colspan="9" class="small">No items found</td></tr>';
         wrap.style.display = 'block';
-      } finally { done(); }
+        done();
+        return;
+      }
+      tbody.innerHTML = '';
+      res.matches.forEach(m => {
+        const tr = document.createElement('tr');
+        const statusColor = m.status === 'Expired' ? '#dc2626' : m.status === 'Expiring Soon' ? '#b45309' : '#16a34a';
+        tr.innerHTML =
+          '<td><button class="btn small" style="white-space:nowrap">Select</button></td>' +
+          '<td><strong>' + esc(m.name) + '</strong></td>' +
+          '<td>' + esc(m.barcode||'—') + '</td>' +
+          '<td>' + esc(m.lot||'—') + '</td>' +
+          '<td>' + esc(formatDateMMDDYYYY(m.exp)) + '</td>' +
+          '<td>' + esc(m.category||'—') + '</td>' +
+          '<td style="font-weight:600;color:#0b5fff">' + esc(m.location||'—') + '</td>' +
+          '<td style="font-weight:700">' + esc(String(m.remaining||0)) + '</td>' +
+          '<td style="color:' + statusColor + ';font-weight:600">' + esc(enhanceStatus(m.status,m.exp)||'OK') + '</td>';
+        tr.querySelector('button').addEventListener('click', () => selectTransferItem(m));
+        tbody.appendChild(tr);
+      });
+      wrap.style.display = 'block';
+      done();
     });
   });
 }
@@ -1840,7 +1840,7 @@ function selectTransferItem(match){
   const toSel = $('transferToLocation');
   toSel.innerHTML = '<option value="">-- select destination --</option>';
   (locationList||[]).forEach(l => {
-    if(_normalize_(l) === _normalize_(match.location||'')) return;
+    if((l||'').trim().toLowerCase() === (match.location||'').trim().toLowerCase()) return;
     const o = document.createElement('option'); o.value = l; o.textContent = l; toSel.appendChild(o);
   });
   $('transferFormWrap').style.display = 'block';
