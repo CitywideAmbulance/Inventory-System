@@ -148,28 +148,16 @@
 
     <!-- ── CREATE ITEM ── -->
     <div id="createCard" class="card" style="display:none">
-    <div id="createCard" class="card" style="display:none">
-      <h3>Create Inventory Item</h3>
       <h3>Create Inventory Item</h3>
       <div class="instruction">
-      <div class="instruction">
-        <p><strong>Instructions:</strong><br>
         <p><strong>Instructions:</strong><br>
          • Select a <strong>Category</strong> from the dropdown.<br>
-         • Select a <strong>Category</strong> from the dropdown.<br>
-         • Select an <strong>Item</strong> from the dropdown.<br>
          • Select an <strong>Item</strong> from the dropdown.<br>
          • Select a <strong>Location</strong> (stockroom) to allocate the item to.<br>
-         • Select a <strong>Location</strong> (stockroom) to allocate the item to.<br>
-         • Press the camera icon to scan or type the Barcode (if available).<br>
          • Press the camera icon to scan or type the Barcode (if available).<br>
          • Type the Lot number (if available).<br>
-         • Type the Lot number (if available).<br>
-         • Choose an Expiration date (if available).<br>
          • Choose an Expiration date (if available).<br>
          • Enter the Quantity you are adding to stock.<br>
-         • Enter the Quantity you are adding to stock.<br>
-         • Once you are finished, press <strong>Save item</strong> and the data will be transferred to the database.</p>
          • Once you are finished, press <strong>Save item</strong> and the data will be transferred to the database.</p>
       </div>
       <div style="margin-bottom:10px">
@@ -1071,7 +1059,6 @@ function renderDashboardVehicles(done){
 
 // ── Create Item ───────────────────────────────────────────────────────────────
 function clearCreateForm(){
-function clearCreateForm(){ $('createItemName').value=''; $('createBarcode').value=''; $('createLot').value=''; $('createExp').value=''; $('createQty').value=1; $('createCategory').value=''; $('createLocation').value=''; }
   $('createItemName').value=''; $('createBarcode').value=''; $('createLot').value='';
   $('createExp').value=''; $('createQty').value=1; $('createCategory').value='';
   $('createLocation').value='';
@@ -1080,44 +1067,26 @@ function clearCreateForm(){ $('createItemName').value=''; $('createBarcode').val
   toggleCreateCategoryState();
 }
 function createItemClient(){
-function createItemClient(){
-  const btn=$('createSave');
   const btn=$('createSave');
   disableButton(btn, ()=>new Promise((resolve)=>{
-  disableButton(btn, ()=>new Promise((resolve)=>{
-    const payload={
     const payload={
       name:($('createItemName').value||'').trim(),
-      name:($('createItemName').value||'').trim(),
-      barcode:($('createBarcode').value||'').trim(),
       barcode:($('createBarcode').value||'').trim(),
       lot:($('createLot').value||'').trim(),
-      lot:($('createLot').value||'').trim(),
-      exp:($('createExp').value||'').trim(),
       exp:($('createExp').value||'').trim(),
       qty:Number($('createQty').value||0),
-      qty:Number($('createQty').value||0),
-      category:($('createCategory').value||'').trim(),
       category: ($('createDisableCategory') && $('createDisableCategory').checked) ? '' : ($('createCategory').value||'').trim(),
       location:($('createLocation').value||'').trim()
-      location:($('createLocation').value||'').trim()
-    };
     };
     if(!payload.name){ alert('Item name required'); resolve(); return; }
-    if(!payload.name){ alert('Item name required'); resolve(); return; }
-    if(!payload.location){ alert('Location (stockroom) is required'); resolve(); return; }
     if(!payload.location){ alert('Location (stockroom) is required'); resolve(); return; }
     jsonpCall('createItem', payload, function(res){
-    jsonpCall('createItem', payload, function(res){
-      if(!res||res.success===false){ alert((res&&res.message)?res.message:'Create failed'); resolve(); return; }
       if(!res||res.success===false){ alert((res&&res.message)?res.message:'Create failed'); resolve(); return; }
       clearCreateForm(); refreshAll(); alert(res.message||'Saved'); resolve();
-      clearCreateForm(); refreshAll(); alert(res.message||'Saved'); resolve();
     });
-    });
-  }));
   }));
 }
+
 // ── Create Item helpers ──────────────────────────────────────────────────────
 function toggleCreateCategoryState(){
   const cb  = $('createDisableCategory');
