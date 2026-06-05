@@ -160,13 +160,6 @@
          • Enter the Quantity you are adding to stock.<br>
          • Once you are finished, press <strong>Save item</strong> and the data will be transferred to the database.</p>
       </div>
-      <div style="margin-bottom:10px">
-        <label style="display:inline-flex;align-items:center;gap:8px;font-weight:500;color:#1e293b;cursor:pointer">
-          <input type="checkbox" id="createDisableCategory" onchange="toggleCreateCategoryState()" />
-          Disable Category Selection When Saving
-        </label>
-        <div class="small" style="margin-top:3px;margin-left:24px;color:#6b7280">When checked, the item will be saved with no category — useful for shared stockroom items that apply to both bags and vehicles.</div>
-      </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
         <div><label>Category</label><select id="createCategory"><option value="">-- none --</option></select></div>
         <div><label>Item name</label><input id="createItemName" list="reqList" placeholder="Type or choose" /><datalist id="reqList"></datalist></div>
@@ -182,6 +175,13 @@
         <div><label>Lot number</label><input id="createLot" placeholder="Lot number" /></div>
         <div><label>Expiration</label><input id="createExp" type="date" /></div>
         <div><label>Quantity</label><input id="createQty" type="number" min="0" value="1" /></div>
+      </div>
+      <div style="margin-top:14px;padding:10px 12px;background:#f9fafc;border:1px solid var(--border);border-radius:8px;display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <label style="display:inline-flex;align-items:center;gap:8px;font-weight:500;color:#1e293b;cursor:pointer;margin:0">
+          <input type="checkbox" id="createDisableCategory" onchange="toggleCreateCategoryState()" />
+          Disable Category Selection When Saving
+        </label>
+        <span class="small" style="color:#6b7280">When checked, item saves with no category — for shared stockroom items that apply to both bags and vehicles.</span>
       </div>
       <div style="margin-top:12px"><button id="createSave" class="btn">Save item</button> <button id="createClear" class="btn secondary">Clear</button></div>
     </div>
