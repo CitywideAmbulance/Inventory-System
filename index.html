@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.11</title>
+  <title>Citywide Inventory — Web App v2.12</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -86,7 +86,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.11</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.12</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -102,6 +102,7 @@
       <button id="btnEquipment" class="btn">Equipment Inventory</button>
       <button id="btnNarcotics" class="btn">Narcotics</button>
       <button id="btnTransfer" class="btn">Stock Transfer</button>
+      <button id="btnFleet" class="btn">Fleet Inventory</button>
       <button id="btnRefresh" class="btn secondary">Refresh</button>
     </div>
   </div>
@@ -518,6 +519,49 @@
     </div>
   </div>
 
+    <!-- ── FLEET INVENTORY ── -->
+    <div id="fleetCard" class="card" style="display:none">
+      <h3>Fleet Inventory</h3>
+      <div class="instruction">
+        <p><strong>Instructions:</strong><br>
+         &bull; Scan the barcode with the camera icon or type it manually.<br>
+         &bull; Fill in the part details — at minimum a <strong>Part Name</strong> or <strong>Barcode</strong> is required.<br>
+         &bull; Enter the quantity and unit cost.<br>
+         &bull; Use the Location fields to specify exactly where this part is stored (Aisle, Rack, Row).<br>
+         &bull; Press <strong>Save Part</strong> when finished.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+        <div>
+          <label>Barcode</label>
+          <div style="display:flex;gap:8px">
+            <input id="fleetBarcode" placeholder="Scan or type barcode" />
+            <button id="fleetCameraBtn" class="cameraBtn">📷</button>
+          </div>
+          <div id="fleetScanner" class="readerContainer">
+            <div class="scannerBox" id="fleetScannerBox"><div style="color:#fff">Camera preview</div></div>
+            <button class="closeCam" id="fleetCloseCam" style="display:none">✕</button>
+            <div id="fleetScannerStatus" class="statusMsg"></div>
+          </div>
+        </div>
+        <div><label>Brand</label><input id="fleetBrand" placeholder="Brand / manufacturer" /></div>
+        <div><label>Part Name <span style="color:#dc2626">*</span></label><input id="fleetPartName" placeholder="Part name" /></div>
+        <div><label>Part Number</label><input id="fleetPartNumber" placeholder="Part number / SKU" /></div>
+        <div><label>Compatible With</label><input id="fleetCompatibleWith" placeholder="Vehicle make, model, year..." /></div>
+        <div><label>Description</label><input id="fleetDescription" placeholder="Brief description" /></div>
+        <div><label>Category</label><input id="fleetCategory" placeholder="e.g. Brakes, Electrical..." /></div>
+        <div><label>Location Aisle</label><input id="fleetLocationAisle" placeholder="Aisle" /></div>
+        <div><label>Location Rack</label><input id="fleetLocationRack" placeholder="Rack" /></div>
+        <div><label>Location Row</label><input id="fleetLocationRow" placeholder="Row" /></div>
+        <div><label>Quantity</label><input id="fleetQuantity" type="number" min="0" value="1" /></div>
+        <div><label>Unit Cost ($)</label><input id="fleetUnitCost" type="number" min="0" step="0.01" placeholder="0.00" /></div>
+      </div>
+      <div style="margin-top:14px">
+        <button id="fleetSave" class="btn">Save Part</button>
+        <button id="fleetClear" class="btn secondary" style="margin-left:8px">Clear</button>
+      </div>
+    </div>
+  </div>
+  
 <script>
 const API_URL = "https://script.google.com/a/macros/citywideambulance.com/s/AKfycbyM1RyhlzUZcwTqhJiwI2GmaWaz52kJbEeFOKDb8J7Pg69zRnvsKqHf1098trpZgCh0/exec";
 const $ = id => document.getElementById(id);
@@ -664,7 +708,7 @@ function showDashSpinner_(cols, msg){
 
 // ── Card switching ────────────────────────────────────────────────────────────
 function showCard(id){
-  ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard','transferCard'].forEach(c => {
+  ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard','transferCard','fleetCard'].forEach(c => {
     const el = $(c);
     if(el) el.style.display = (c===id) ? 'block' : 'none';
   });
@@ -688,11 +732,11 @@ function updateUserUI(email){
   const el = $('currentUser');
   if(email === null || email === undefined){
     el.textContent = 'Signed Out';
-    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnTransfer','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = true; });
-    ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard','transferCard'].forEach(id => { const card = $(id); if(card) card.style.display = 'none'; });
+    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnTransfer','btnFleet','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = true; });
+    ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard','transferCard','fleetCard'].forEach(id => { const card = $(id); if(card) card.style.display = 'none'; });
   }else{
     el.textContent = email;
-    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnTransfer','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = false; });
+    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnTransfer','btnFleet','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = false; });
   }
 }
 
@@ -1312,6 +1356,7 @@ function handleDetectedCode(code, targetInputId){
   if(targetInputId==='equipmentBarcode'){ tgt.value=code; tgt.dataset.scannedBarcode=code; searchEquipmentClient(); return; }
   if(targetInputId==='narcBarcode'){ tgt.value=code; tgt.dataset.scannedBarcode=code; return; }
   if(targetInputId==='transferSearch'){ tgt.value=code; stopScanner(); runTransferSearch(); return; }
+  if(targetInputId==='fleetBarcode'){ tgt.value=code; tgt.dataset.scannedBarcode=code; return; }
   const mBag=targetInputId.match(/^scan-(\d+)$/);
   if(mBag){
     const idx=Number(mBag[1]);
@@ -1971,6 +2016,84 @@ function _resetTransferForm(){
   $('transferEmployeeId').value  = '';
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// FLEET INVENTORY
+// ═══════════════════════════════════════════════════════════════════════════════
+function clearFleetForm(){
+  ['fleetBarcode','fleetBrand','fleetPartName','fleetPartNumber','fleetCompatibleWith',
+   'fleetDescription','fleetCategory','fleetLocationAisle','fleetLocationRack',
+   'fleetLocationRow'].forEach(id => { const el=$(id); if(el) el.value=''; });
+  const qty=$(('fleetQuantity')); if(qty) qty.value=1;
+  const cost=$('fleetUnitCost'); if(cost) cost.value='';
+}
+function saveFleetItemClient(){
+  const btn = $('fleetSave');
+  disableButton(btn, () => new Promise((resolve) => {
+    const partName = ($('fleetPartName').value||'').trim();
+    const barcode  = ($('fleetBarcode').value||'').trim();
+    if(!partName && !barcode){ alert('Part Name or Barcode is required'); resolve(); return; }
+    const payload = {
+      barcode       : barcode,
+      brand         : ($('fleetBrand').value||'').trim(),
+      partName      : partName,
+      partNumber    : ($('fleetPartNumber').value||'').trim(),
+      compatibleWith: ($('fleetCompatibleWith').value||'').trim(),
+      description   : ($('fleetDescription').value||'').trim(),
+      category      : ($('fleetCategory').value||'').trim(),
+      locationAisle : ($('fleetLocationAisle').value||'').trim(),
+      locationRack  : ($('fleetLocationRack').value||'').trim(),
+      locationRow   : ($('fleetLocationRow').value||'').trim(),
+      quantity      : Number($('fleetQuantity').value||0),
+      unitCost      : Number($('fleetUnitCost').value||0)
+    };
+    jsonpCall('saveFleetItem', payload, function(res){
+      if(!res || res.success === false){ alert((res && res.message) ? res.message : 'Save failed'); resolve(); return; }
+      clearFleetForm();
+      alert(res.message || 'Fleet item saved');
+      resolve();
+    });
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FLEET INVENTORY
+// ═══════════════════════════════════════════════════════════════════════════════
+function clearFleetForm(){
+  ['fleetBarcode','fleetBrand','fleetPartName','fleetPartNumber','fleetCompatibleWith',
+   'fleetDescription','fleetCategory','fleetLocationAisle','fleetLocationRack',
+   'fleetLocationRow'].forEach(id => { const el=$(id); if(el) el.value=''; });
+  const qty=$(('fleetQuantity')); if(qty) qty.value=1;
+  const cost=$('fleetUnitCost'); if(cost) cost.value='';
+}
+function saveFleetItemClient(){
+  const btn = $('fleetSave');
+  disableButton(btn, () => new Promise((resolve) => {
+    const partName = ($('fleetPartName').value||'').trim();
+    const barcode  = ($('fleetBarcode').value||'').trim();
+    if(!partName && !barcode){ alert('Part Name or Barcode is required'); resolve(); return; }
+    const payload = {
+      barcode       : barcode,
+      brand         : ($('fleetBrand').value||'').trim(),
+      partName      : partName,
+      partNumber    : ($('fleetPartNumber').value||'').trim(),
+      compatibleWith: ($('fleetCompatibleWith').value||'').trim(),
+      description   : ($('fleetDescription').value||'').trim(),
+      category      : ($('fleetCategory').value||'').trim(),
+      locationAisle : ($('fleetLocationAisle').value||'').trim(),
+      locationRack  : ($('fleetLocationRack').value||'').trim(),
+      locationRow   : ($('fleetLocationRow').value||'').trim(),
+      quantity      : Number($('fleetQuantity').value||0),
+      unitCost      : Number($('fleetUnitCost').value||0)
+    };
+    jsonpCall('saveFleetItem', payload, function(res){
+      if(!res || res.success === false){ alert((res && res.message) ? res.message : 'Save failed'); resolve(); return; }
+      clearFleetForm();
+      alert(res.message || 'Fleet item saved');
+      resolve();
+    });
+  }));
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 window.onload = function(){
   $('btnDashboard').addEventListener('click', ()=>showCard('dashboardCard'));
@@ -2063,6 +2186,17 @@ window.onload = function(){
     _resetTransferForm();
   });
   $('transferRefreshLog').addEventListener('click', loadTransferLog);
+  
+  // Fleet Inventory listeners
+  $('btnFleet').addEventListener('click', ()=>showCard('fleetCard'));
+  $('fleetSave').addEventListener('click', saveFleetItemClient);
+  $('fleetClear').addEventListener('click', clearFleetForm);
+  $('fleetCameraBtn').addEventListener('click', function(){
+    const wrap = $('fleetScanner');
+    if(wrap.classList.contains('active')) return stopScanner();
+    startScannerHtml5('fleetScannerBox','fleetBarcode','fleetScanner','fleetScannerStatus','fleetCloseCam');
+  });
+  $('fleetCloseCam').addEventListener('click', stopScanner);
 
   $('btnRefresh').addEventListener('click', function(){
     disableButton(this, ()=>new Promise((resolve)=>{
