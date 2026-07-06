@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.13</title>
+  <title>Citywide Inventory — Web App v2.14</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -86,7 +86,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.13</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.14</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -99,6 +99,7 @@
       <button id="btnCreate" class="btn">Create Item</button>
       <button id="btnRestock" class="btn">ALS Bag Restock</button>
       <button id="btnCabinet" class="btn">Cabinet Restock</button>
+      <button id="btnAED" class="btn">AED Restock</button>
       <button id="btnEquipment" class="btn">Equipment Inventory</button>
       <button id="btnNarcotics" class="btn">Narcotics</button>
       <button id="btnTransfer" class="btn">Stock Transfer</button>
@@ -121,6 +122,7 @@
             <option value="narcs">Narcs</option>
             <option value="kits">Kits (select one)</option>
             <option value="fleet">Fleet Parts</option>
+            <option value="aed">AED (select one)</option>
           </select>
         </label>
       </div>
@@ -139,6 +141,10 @@
       <div id="narcKitSelectorWrap" style="margin-top:8px;display:none">
         <label>Select Narc Kit</label>
         <select id="dashboardNarcKitSelect"></select>
+      </div>
+      <div id="aedSelectorWrap" style="margin-top:8px;display:none">
+        <label>Select AED</label>
+        <select id="dashboardAEDSelect"></select>
       </div>
       <div class="tableWrap" style="margin-top:12px" id="dashTableWrap">
         <table>
@@ -444,6 +450,55 @@
       </div>
     </div>
 
+    <!-- ── AED RESTOCK ── -->
+    <div id="aedCard" class="card" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <h3 style="margin:0">AED Restock</h3>
+        <div class="small">Select side &amp; AED, scan items, submit</div>
+      </div>
+      <div class="instruction">
+        <p><strong>Instructions:</strong><br>
+        &bull; Select the <strong>Side</strong> (Citywide or Bronxcare) — this determines the required items.<br>
+        &bull; Select the <strong>AED</strong> you are restocking from the dropdown.<br>
+        &bull; Select the <strong>Stock Location</strong> to pull inventory from.<br>
+        &bull; Press the camera icon or type a lot/name and press 🔍 to look up an item.<br>
+        &bull; Existing item: fields lock and AED Qty remains editable.<br>
+        &bull; Missing item: fill fields, choose replacement, click Add &amp; Use.<br>
+        &bull; Press <strong>Submit All</strong> when finished.
+        </p>
+      </div>
+      <div style="height:10px"></div>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label>Side</label>
+          <select id="aedSideSelect">
+            <option value="Citywide">Citywide</option>
+            <option value="Bronxcare">Bronxcare</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label>AED</label>
+          <select id="aedSelect"><option value="">-- select AED --</option></select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label>Stock Location</label>
+          <select id="aedStockLocation"><option value="">-- all locations --</option></select>
+        </div>
+      </div>
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr><th>Scan / Lot # / Name</th><th>Item Name</th><th>Lot</th><th>Expiration</th><th>Category</th><th>Location</th><th>Inv Qty</th><th>AED Qty</th><th>Status</th></tr>
+          </thead>
+          <tbody id="aedRestockBody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+        <button id="aedResetRows" class="btn secondary">Reset rows</button>
+        <button id="aedSubmitAll" class="btn">Submit All</button>
+      </div>
+    </div>
+
     <!-- ── NARCOTICS ── -->
     <div id="narcoticsCard" class="card" style="display:none">
       <h3>Narcotics</h3>
@@ -581,7 +636,8 @@ let currentUser = null;
 let selectedBag = '';
 let html5QrCode = null;
 let dashboardData = null, requiredItems = [], bagList = [], vehicleList = [], cabinetList = [],
-    locationList = [], categories = { alsCategories:[], cabinetCategories:[] },
+    locationList = [], aedList = [], aedRequiredItems = [],
+    categories = { alsCategories:[], cabinetCategories:[], aedCategories:[] },
     equipmentLookups = { types:[], locations:[], statuses:[], serviceReasons:[] },
     narcLookups = { narcNames:[], narcKits:[] },
     cabinetRequiredItems = [];  // items for currently selected cabinet
@@ -717,7 +773,7 @@ function showDashSpinner_(cols, msg){
 
 // ── Card switching ────────────────────────────────────────────────────────────
 function showCard(id){
-  ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard','transferCard','fleetCard'].forEach(c => {
+  ['dashboardCard','createCard','bagCard','cabinetCard','aedCard','equipmentCard','narcoticsCard','transferCard','fleetCard'].forEach(c => {
     const el = $(c);
     if(el) el.style.display = (c===id) ? 'block' : 'none';
   });
@@ -730,6 +786,9 @@ function showCard(id){
   if(id === 'cabinetCard'){
     initCabinetRestockRows();
   }
+  if(id === 'aedCard'){
+    initAEDRestockRows();
+  }
   if(id === 'transferCard'){
     loadTransferLog();
     populateTransferFilters();
@@ -741,11 +800,11 @@ function updateUserUI(email){
   const el = $('currentUser');
   if(email === null || email === undefined){
     el.textContent = 'Signed Out';
-    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnTransfer','btnFleet','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = true; });
-    ['dashboardCard','createCard','bagCard','cabinetCard','equipmentCard','narcoticsCard','transferCard','fleetCard'].forEach(id => { const card = $(id); if(card) card.style.display = 'none'; });
+    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnAED','btnTransfer','btnFleet','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = true; });
+    ['dashboardCard','createCard','bagCard','cabinetCard','aedCard','equipmentCard','narcoticsCard','transferCard','fleetCard'].forEach(id => { const card = $(id); if(card) card.style.display = 'none'; });
   }else{
     el.textContent = email;
-    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnTransfer','btnFleet','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = false; });
+    ['btnDashboard','btnCreate','btnEquipment','btnRestock','btnCabinet','btnAED','btnTransfer','btnFleet','btnNarcotics'].forEach(id => { const btn = $(id); if(btn) btn.disabled = false; });
   }
 }
 
@@ -794,6 +853,8 @@ function loadDashboardData(){
     populateDashboardBagSelect();
     populateDashboardVehicleSelect();
     populateDashboardNarcKitSelect();
+    populateDashboardAEDSelect();
+    populateAEDSelects();
     renderDashboard();
   });
 }
@@ -802,7 +863,7 @@ function loadBagList(){ jsonpCall('getBagList', null, function(resp){ bagList = 
 function loadVehicleList(){ jsonpCall('getVehicleList', null, function(resp){ vehicleList = resp || []; populateVehicleSelects(); }); }
 function loadCabinetList(){ jsonpCall('getCabinetList', null, function(resp){ cabinetList = resp || []; populateCabinetSelects(); }); }
 function loadLocationList(){ jsonpCall('getLocationList', null, function(resp){ locationList = resp || []; populateLocationSelects(); }); }
-function loadCategories(){ jsonpCall('getCategories', null, function(resp){ categories = resp || { alsCategories:[], cabinetCategories:[] }; populateCategories(); }); }
+function loadCategories(){ jsonpCall('getCategories', null, function(resp){ categories = resp || { alsCategories:[], cabinetCategories:[], aedCategories:[] }; populateCategories(); }); }
 function loadEquipmentLookups(){ jsonpCall('getEquipmentLookups', null, function(resp){ equipmentLookups = resp || { types:[], locations:[], statuses:[], serviceReasons:[] }; populateEquipmentLookups(); }); }
 function loadNarcLookups(){ jsonpCall('getNarcLookups', { location: $('narcLocation') ? $('narcLocation').value : 'Bronxcare' }, function(resp){ narcLookups = resp || { narcNames:[], narcKits:[] }; populateNarcNameList(); populateNarcKitSelect(); populateNarcVerifySelect(); if($('narcMode') && $('narcMode').value === 'verify') loadNarcVerifyRows(); }); }
 
@@ -841,7 +902,8 @@ function populateLocationSelects(){
   const createSel = $('createLocation');
   const bagSel = $('bagStockLocation');
   const cabSel = $('cabinetStockLocation');
-  [createSel, bagSel, cabSel].forEach((s, idx) => {
+  const aedLocSel = $('aedStockLocation');
+  [createSel, bagSel, cabSel, aedLocSel].forEach((s, idx) => {
     if(!s) return;
     const cur = s.value;
     s.innerHTML = idx === 0 ? '<option value="">-- select location --</option>' : '<option value="">-- all locations --</option>';
@@ -885,9 +947,10 @@ function populateReqDatalist(filterCategory){
 
   // Determine if the selected category is a cabinet category
   const isCabinetCat = filterCategory && cabCategories.map(c=>c.toLowerCase()).includes(filterCategory.toLowerCase());
+  const aedCats = (categories && categories.aedCategories) || [];
+  const isAEDCat = filterCategory && aedCats.map(c=>c.toLowerCase()).includes(filterCategory.toLowerCase());
 
-  if(isCabinetCat){
-    // Load cabinet items for this cabinet ID dynamically
+  if(isCabinetCat || isAEDCat){
     jsonpCall('getCategoryItems', {category: filterCategory}, function(items){
       dl.innerHTML = '';
       (items||[]).forEach(it=>{ const o = document.createElement('option'); o.value=it.name; dl.appendChild(o); });
@@ -913,6 +976,7 @@ function populateCategories(){
   sel.innerHTML = '<option value="">-- none --</option>';
   const alsCategories = (categories && categories.alsCategories) || [];
   const cabCategories = (categories && categories.cabinetCategories) || [];
+  const aedCategories = (categories && categories.aedCategories) || [];
   if(alsCategories.length){
     const grp = document.createElement('optgroup'); grp.label = 'ALS Bag Categories';
     alsCategories.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; grp.appendChild(o); });
@@ -921,6 +985,11 @@ function populateCategories(){
   if(cabCategories.length){
     const grp = document.createElement('optgroup'); grp.label = 'Cabinet Categories';
     cabCategories.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; grp.appendChild(o); });
+    sel.appendChild(grp);
+  }
+  if(aedCategories.length){
+    const grp = document.createElement('optgroup'); grp.label = 'AED Categories';
+    aedCategories.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; grp.appendChild(o); });
     sel.appendChild(grp);
   }
 }
@@ -953,10 +1022,12 @@ function onDashboardViewToggle(){
   const bagWrap = $('bagSelectorWrap');
   const vehicleWrap = $('vehicleSelectorWrap');
   const kitWrap = $('narcKitSelectorWrap');
+  const aedWrap = $('aedSelectorWrap');
 
-  [bagWrap, vehicleWrap, kitWrap].forEach(w => { if(w){ w.style.display='none'; w.classList.remove('dash-sel-enter'); } });
+  [bagWrap, vehicleWrap, kitWrap, aedWrap].forEach(w => { if(w){ w.style.display='none'; w.classList.remove('dash-sel-enter'); } });
 
   function slideIn(el){
+    if(!el) return;
     el.style.display='block';
     void el.offsetWidth;
     el.classList.add('dash-sel-enter');
@@ -965,6 +1036,7 @@ function onDashboardViewToggle(){
   if(v === 'bags') slideIn(bagWrap);
   else if(v === 'vehicles') slideIn(vehicleWrap);
   else if(v === 'kits') slideIn(kitWrap);
+  else if(v === 'aed') slideIn(aedWrap);
 
   renderDashboard();
 }
@@ -978,6 +1050,7 @@ function renderDashboard(){
     else if(view === 'kits')     { renderDashboardKits(done); }
     else if(view === 'vehicles') { renderDashboardVehicles(done); }
     else if(view === 'fleet')    { renderDashboardFleet(done); }
+    else if(view === 'aed')      { renderDashboardAED(done);   }
     else                         { renderDashboardBags(done); }
   });
 }
@@ -1140,6 +1213,64 @@ function renderDashboardFleet(done){
         '<td>' + esc(r.category||'—') + '</td>' +
         '<td>' + esc(r.compatibleWith||'—') + '</td>' +
         '<td style="max-width:260px;white-space:normal">' + esc(r.description||'—') + '</td>';
+      body.appendChild(tr);
+    });
+  });
+}
+
+// ── Dashboard: AED ───────────────────────────────────────────────────────────
+function populateDashboardAEDSelect(){
+  const sel = $('dashboardAEDSelect'); if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- select AED --</option>';
+  (dashboardData && dashboardData.aedList || []).forEach(a => {
+    const o = document.createElement('option');
+    o.value = a.barcode || a.aedNumber;
+    o.textContent = a.aedNumber + (a.serialNumber && a.serialNumber !== a.aedNumber ? ' — SN: ' + a.serialNumber : '') + (a.barcode ? ' (' + a.barcode + ')' : '');
+    sel.appendChild(o);
+  });
+  if(cur) sel.value = cur;
+}
+
+function populateAEDSelects(){
+  // Populate the restock AED dropdown
+  const sel = $('aedSelect'); if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- select AED --</option>';
+  (dashboardData && dashboardData.aedList || []).forEach(a => {
+    const o = document.createElement('option');
+    o.value = a.barcode || a.aedNumber;
+    o.textContent = a.aedNumber + (a.serialNumber && a.serialNumber !== a.aedNumber ? ' — SN: ' + a.serialNumber : '') + (a.barcode ? ' (' + a.barcode + ')' : '');
+    sel.appendChild(o);
+  });
+  if(cur) sel.value = cur;
+}
+
+function renderDashboardAED(done){
+  done = done || function(){};
+  const selAED = $('dashboardAEDSelect') ? $('dashboardAEDSelect').value : '';
+  const body = $('dashboardBody'), head = $('dashboardHead').querySelector('tr');
+  head.innerHTML = '<th>Required Item</th><th>Required Qty</th><th>Provided Qty</th><th>Items (exp / lot / qty)</th>';
+  if(!selAED){
+    body.innerHTML = '<tr><td colspan="4" class="small">Select an AED</td></tr>';
+    done(); return;
+  }
+  showDashSpinner_(4, 'Loading AED contents…');
+  done();
+  jsonpCall('getAEDContents', { aedBarcode: selAED }, function(results){
+    body.innerHTML = '';
+    if(!results || !results.length){ body.innerHTML = '<tr><td colspan="4" class="small">No AED data found — restock this AED first</td></tr>'; return; }
+    results.forEach(r => {
+      const itemsHtml = (r.items||[]).map(it =>
+        '<div style="padding:4px 0">' + esc(formatDateMMDDYYYY(it.exp)||'—') + ' | ' + esc(it.lot||'—') + ' | Qty: ' + esc(it.qty||0) + '</div>'
+      ).join('');
+      const tr = document.createElement('tr');
+      const pctColor = r.providedQty >= r.requiredQty ? '#16a34a' : r.providedQty > 0 ? '#b45309' : '#dc2626';
+      tr.innerHTML =
+        '<td>' + esc(r.name) + '</td>' +
+        '<td>' + esc(String(r.requiredQty)) + '</td>' +
+        '<td style="font-weight:700;color:' + pctColor + '">' + esc(String(r.providedQty||0)) + '</td>' +
+        '<td>' + (itemsHtml || '<span class="small" style="color:#94a3b8">None stocked</span>') + '</td>';
       body.appendChild(tr);
     });
   });
@@ -1353,17 +1484,17 @@ function addRestockRow(){
 }
 
 function openRowScanner(idx, mode){
-  const rowId = mode === 'cabinet' ? 'cabrow-'+idx : 'row-'+idx;
+  const rowId = mode === 'cabinet' ? 'cabrow-'+idx : mode === 'aed' ? 'aedrow-'+idx : 'row-'+idx;
   const row=$(rowId); if(!row) return;
   document.querySelectorAll('.rowScannerContainer').forEach(o=>o.remove());
   stopScanner();
-  const containerId = (mode === 'cabinet' ? 'cabRowScannerContainer-' : 'rowScannerContainer-') + idx;
+  const containerId = (mode === 'cabinet' ? 'cabRowScannerContainer-' : mode === 'aed' ? 'aedRowScannerContainer-' : 'rowScannerContainer-') + idx;
   const container=document.createElement('div');
   container.className='rowScannerContainer readerContainer'; container.id=containerId;
-  const boxId = (mode === 'cabinet' ? 'cabRowScannerBox-' : 'rowScannerBox-') + idx;
-  const closeId = (mode === 'cabinet' ? 'cabRowScannerClose-' : 'rowScannerClose-') + idx;
-  const statusId = (mode === 'cabinet' ? 'cabRowScannerStatus-' : 'rowScannerStatus-') + idx;
-  const targetInputId = mode === 'cabinet' ? 'cscan-'+idx : 'scan-'+idx;
+  const boxId = (mode === 'cabinet' ? 'cabRowScannerBox-' : mode === 'aed' ? 'aedRowScannerBox-' : 'rowScannerBox-') + idx;
+  const closeId = (mode === 'cabinet' ? 'cabRowScannerClose-' : mode === 'aed' ? 'aedRowScannerClose-' : 'rowScannerClose-') + idx;
+  const statusId = (mode === 'cabinet' ? 'cabRowScannerStatus-' : mode === 'aed' ? 'aedRowScannerStatus-' : 'rowScannerStatus-') + idx;
+  const targetInputId = mode === 'cabinet' ? 'cscan-'+idx : mode === 'aed' ? 'arscan-'+idx : 'scan-'+idx;
   container.innerHTML='<div class="scannerBox" id="'+boxId+'"><div style="color:#fff">Camera preview</div></div><button class="closeCam" id="'+closeId+'">✕</button><div id="'+statusId+'" class="statusMsg"></div>';
   row.parentNode.insertBefore(container, row.nextSibling);
   $(closeId).addEventListener('click', stopScanner);
@@ -1430,16 +1561,31 @@ function handleDetectedCode(code, targetInputId){
       showMatchesList(idx,res.matches,'cabinet');
     });
   }
+  const mAED=targetInputId.match(/^arscan-(\d+)$/);
+  if(mAED){
+    const idx=Number(mAED[1]);
+    const loc=getSelectedAEDLocation();
+    jsonpCall('getItem', {q:code,filterInvalid:false,location:loc}, function(res){
+      if(!res||!res.found||!res.matches||res.matches.length===0){ showInlineAdd(idx,code,true,'aed'); return; }
+      const codeNorm=String(code||'').trim().toLowerCase();
+      const exact=res.matches.filter(mm=>String(mm.barcode||'').trim().toLowerCase()===codeNorm);
+      if(exact.length===1){ applyMatchToRow(idx,exact[0],'aed'); return; }
+      if(exact.length>1){ showMatchesList(idx,exact,'aed'); return; }
+      if(res.matches.length===1){ applyMatchToRow(idx,res.matches[0],'aed'); return; }
+      showMatchesList(idx,res.matches,'aed');
+    });
+  }
 }
 
 function rowLookup(idx, mode){
-  const scanId = mode === 'cabinet' ? 'cscan-'+idx : 'scan-'+idx;
-  const searchId = mode === 'cabinet' ? 'csearch-'+idx : 'search-'+idx;
+  const p2 = _prefix(mode);
+  const scanId = p2+'scan-'+idx;
+  const searchId = p2+'search-'+idx;
   const btn=$(searchId);
   const input=$(scanId); if(!input) return;
   const typed=(input.value||'').trim(); if(!typed){ alert('Type or scan something first'); return; }
   const searchVal=input.dataset.scannedBarcode||typed;
-  const loc = mode === 'cabinet' ? getSelectedCabinetLocation() : getSelectedBagLocation();
+  const loc = mode === 'cabinet' ? getSelectedCabinetLocation() : mode === 'aed' ? getSelectedAEDLocation() : getSelectedBagLocation();
   withSearchBusy(btn, (done)=>{
     jsonpCall('getItem', {q:searchVal,filterInvalid:false,location:loc}, function(res){
       try{
@@ -1455,7 +1601,7 @@ function rowLookup(idx, mode){
   });
 }
 
-function _prefix(mode){ return mode === 'cabinet' ? 'c' : ''; }
+function _prefix(mode){ if(mode==='cabinet') return 'c'; if(mode==='aed') return 'ar'; return ''; }
 
 function showMatchesList(idx, matches, mode){
   const p = _prefix(mode);
@@ -1476,7 +1622,7 @@ function applyMatchToRow(idx, match, mode){
   const p = _prefix(mode);
   const nameInput=$(p+'nameinp-'+idx), lotInput=$(p+'lotinp-'+idx), expInput=$(p+'expinp-'+idx), catInput=$(p+'catinp-'+idx);
   const locInput=$(p+'locinp-'+idx);
-  const invQty=$(p+'invqty-'+idx), bagQty=(mode==='cabinet'?$('ccabqty-'+idx):$('bagqty-'+idx));
+  const invQty=$(p+'invqty-'+idx), bagQty=(mode==='aed'?$('arqty-'+idx):mode==='cabinet'?$('ccabqty-'+idx):$('bagqty-'+idx));
   const stockInfo=$(p+'stockinfo-'+idx), scanInp=$(p+'scan-'+idx);
   if(nameInput){ nameInput.value=match.name||''; nameInput.disabled=true; }
   if(lotInput){ lotInput.value=match.lot||''; lotInput.disabled=true; }
@@ -1496,6 +1642,7 @@ function applyMatchToRow(idx, match, mode){
   }
   const holder=$(p+'matches-'+idx); if(holder) holder.innerHTML='';
   if(mode === 'cabinet') maybeAddCabinetRow();
+  else if(mode === 'aed') maybeAddAEDRestockRow();
   else maybeAddRow();
 }
 
@@ -1509,8 +1656,9 @@ function setStatusCellWithReplacementUI(idx, currentStatus, replacementRequired,
   if(replaceSel){
     replaceSel.innerHTML='<option value="">(select)</option>';
     if(mode === 'cabinet'){
-      // Use cabinet required items for the selected cabinet
       (cabinetRequiredItems||[]).forEach(r=>{ const opt=document.createElement('option'); opt.value=r.name||''; opt.textContent=(r.name||'')+' ('+r.cabinetId+')'; replaceSel.appendChild(opt); });
+    } else if(mode === 'aed'){
+      (aedRequiredItems||[]).forEach(r=>{ const opt=document.createElement('option'); opt.value=r.name||''; opt.textContent=(r.name||'')+' (AED)'; replaceSel.appendChild(opt); });
     } else {
       (requiredItems||[]).forEach(r=>{ const opt=document.createElement('option'); opt.value=r.name||''; opt.textContent=(r.name||'')+' ('+(r.category||'')+')'; replaceSel.appendChild(opt); });
     }
@@ -1530,7 +1678,7 @@ function showInlineAdd(idx, scannedValue, isBarcodeScan, mode){
   const nameInput=$(p+'nameinp-'+idx), lotInput=$(p+'lotinp-'+idx), expInput=$(p+'expinp-'+idx), catInput=$(p+'catinp-'+idx);
   const locInput=$(p+'locinp-'+idx);
   const invQty=$(p+'invqty-'+idx), stockInfo=$(p+'stockinfo-'+idx);
-  const bagQty=(mode==='cabinet'?$('ccabqty-'+idx):$('bagqty-'+idx));
+  const bagQty=(mode==='aed'?$('arqty-'+idx):mode==='cabinet'?$('ccabqty-'+idx):$('bagqty-'+idx));
   if(nameInput) nameInput.disabled=false;
   if(lotInput) lotInput.disabled=false;
   if(expInput) expInput.disabled=false;
@@ -1602,6 +1750,7 @@ function showInlineAdd(idx, scannedValue, isBarcodeScan, mode){
         if(stockInfo) stockInfo.textContent='Added to inventory';
         const m=$(p+'matches-'+idx); if(m) m.innerHTML='';
         if(mode === 'cabinet') maybeAddCabinetRow();
+        else if(mode === 'aed') maybeAddAEDRestockRow();
         else maybeAddRow();
         jsonpCall('getDashboardData', null, function(resp){ dashboardData=resp||dashboardData; renderDashboard(); });
       });
@@ -1733,6 +1882,91 @@ function cabinetSubmitAll(){
     jsonpCall('submitVehicleCabinet', entries, function(res){
       if(!res||res.success===false){ alert((res&&res.message)?res.message:'Submit failed'); resolve(); return; }
       alert(res.message||'Submitted'); initCabinetRestockRows(); refreshAll(); resolve();
+    });
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AED RESTOCK
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function getSelectedAEDLocation(){
+  return ($('aedStockLocation') ? $('aedStockLocation').value : '') || '';
+}
+
+function initAEDRestockRows(){
+  const tbody = $('aedRestockBody'); if(!tbody) return;
+  tbody.innerHTML = '';
+  // Load required items for the selected side (background, for replace-target dropdown)
+  const side = $('aedSideSelect') ? $('aedSideSelect').value : 'Citywide';
+  const apiSide = side === 'Citywide' ? 'CW' : 'BC';
+  jsonpCall('getAEDRequiredItems', { side: apiSide }, function(items){
+    aedRequiredItems = items || [];
+  });
+  addAEDRestockRow(); addAEDRestockRow();
+}
+
+function addAEDRestockRow(){
+  const tbody = $('aedRestockBody');
+  const idx   = tbody.querySelectorAll('tr.aedRestockRow').length + 1;
+  const tr = document.createElement('tr'); tr.className='aedRestockRow'; tr.id='aedrow-'+idx;
+  tr.innerHTML =
+    '<td data-label="Scan / Lot # / Name"><div class="scanWrap"><input id="arscan-'+idx+'" placeholder="Scan barcode or enter lot/name" /><button id="arsearch-'+idx+'" class="btn small secondary searchActionBtn">🔍</button><button id="arcam-'+idx+'" class="cameraBtn">📷</button></div><div id="armatches-'+idx+'"></div></td>'+
+    '<td data-label="Item Name"><input id="arnameinp-'+idx+'" /></td>'+
+    '<td data-label="Lot"><input id="arlotinp-'+idx+'" /></td>'+
+    '<td data-label="Expiration"><input type="date" id="arexpinp-'+idx+'" /></td>'+
+    '<td data-label="Category"><input id="arcatinp-'+idx+'" /></td>'+
+    '<td data-label="Location"><input id="arlocinp-'+idx+'" class="gray" disabled /></td>'+
+    '<td data-label="Inv Qty"><input id="arinvqty-'+idx+'" type="number" min="0" value="" class="gray" disabled /><div id="arstockinfo-'+idx+'" class="small" style="margin-top:4px"></div></td>'+
+    '<td data-label="AED Qty"><input id="arqty-'+idx+'" type="number" min="0" value="1" style="width:84px" /></td>'+
+    '<td data-label="Status"><div id="arstatuswrap-'+idx+'"></div></td>';
+  tbody.appendChild(tr);
+  $('arsearch-'+idx).addEventListener('click', ()=>rowLookup(idx, 'aed'));
+  $('arscan-'+idx).addEventListener('keydown', ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); rowLookup(idx, 'aed'); } });
+  $('arcam-'+idx).addEventListener('click', ()=>openRowScanner(idx, 'aed'));
+}
+
+function maybeAddAEDRestockRow(){
+  const rows = document.querySelectorAll('tr.aedRestockRow');
+  if(rows.length===0){ addAEDRestockRow(); return; }
+  const lastIndex   = rows.length;
+  const lastNameCell = $('arnameinp-'+lastIndex);
+  if(lastNameCell && lastNameCell.value && lastNameCell.value.trim()!=='') addAEDRestockRow();
+}
+
+function collectAEDRestockEntries(){
+  const aedBarcode = $('aedSelect') ? ($('aedSelect').value||'') : '';
+  if(!aedBarcode){ alert('Select an AED first'); return null; }
+  const side = $('aedSideSelect') ? ($('aedSideSelect').value||'Citywide') : 'Citywide';
+  const rows = Array.from(document.querySelectorAll('tr.aedRestockRow'));
+  const entries = [];
+  rows.forEach((r,i)=>{
+    const idx = i + 1;
+    const scanField = $('arscan-'+idx); if(!scanField) return;
+    const qtyVal    = Number($('arqty-'+idx) ? ($('arqty-'+idx).value||0) : 0);
+    const stockRow  = scanField.dataset.row || '';
+    const name      = $('arnameinp-'+idx) ? $('arnameinp-'+idx).value.trim() : (scanField.dataset.name||'');
+    const barcode   = scanField.dataset.barcode || scanField.dataset.scannedBarcode || '';
+    const lot       = $('arlotinp-'+idx) ? $('arlotinp-'+idx).value.trim() : (scanField.dataset.lot||'');
+    const exp       = $('arexpinp-'+idx) ? $('arexpinp-'+idx).value : (scanField.dataset.exp||'');
+    const category  = $('arcatinp-'+idx) ? $('arcatinp-'+idx).value.trim() : (scanField.dataset.category||'');
+    const location  = $('arlocinp-'+idx) ? $('arlocinp-'+idx).value.trim() : (scanField.dataset.location||'');
+    const status    = $('arstatusinp-'+idx) ? $('arstatusinp-'+idx).value.trim() : (scanField.dataset.finalStatus||'');
+    const replaceTarget = scanField.dataset.replaceTarget || '';
+    if((stockRow||barcode||name) && qtyVal>0)
+      entries.push({ aedBarcode, side, name, barcode, lot, exp, category, location, status, qty:qtyVal, row:Number(stockRow)||'', replaceTarget });
+  });
+  return entries;
+}
+
+function aedRestockSubmitAll(){
+  const btn = $('aedSubmitAll');
+  disableButton(btn, ()=>new Promise((resolve)=>{
+    const entries = collectAEDRestockEntries(); if(entries===null){ resolve(); return; }
+    if(entries.length===0){ alert('No valid items to submit'); resolve(); return; }
+    jsonpCall('submitAEDRestock', entries, function(res){
+      if(!res||res.success===false){ alert((res&&res.message)?res.message:'Submit failed'); resolve(); return; }
+      alert(res.message||'Submitted'); initAEDRestockRows(); refreshAll(); resolve();
     });
   }));
 }
@@ -2182,6 +2416,7 @@ window.onload = function(){
   $('btnEquipment').addEventListener('click', ()=>showCard('equipmentCard'));
   $('btnRestock').addEventListener('click', ()=>showCard('bagCard'));
   $('btnCabinet').addEventListener('click', ()=>showCard('cabinetCard'));
+  $('btnAED').addEventListener('click', ()=>showCard('aedCard'));
   $('btnNarcotics').addEventListener('click', ()=>showCard('narcoticsCard'));
   $('btnTransfer').addEventListener('click', ()=>showCard('transferCard'));
   $('btnSignOut').addEventListener('click', signOutUser);
@@ -2196,6 +2431,9 @@ window.onload = function(){
   });
   $('dashboardNarcKitSelect').addEventListener('change', function(){
     dashTransition_(function(done){ renderDashboardKits(done); });
+  });
+  $('dashboardAEDSelect').addEventListener('change', function(){
+    dashTransition_(function(done){ renderDashboardAED(done); });
   });
 
   if($('narcVerifySelect')) $('narcVerifySelect').addEventListener('change', ()=>loadNarcVerifyRows());
@@ -2213,6 +2451,15 @@ window.onload = function(){
   $('cabinetSelect').addEventListener('change', initCabinetRestockRows);
   $('cabinetResetRows').addEventListener('click', initCabinetRestockRows);
   $('cabinetSubmitAll').addEventListener('click', cabinetSubmitAll);
+
+  // AED Restock listeners
+  $('aedSideSelect').addEventListener('change', function(){
+    const side = this.value === 'Citywide' ? 'CW' : 'BC';
+    jsonpCall('getAEDRequiredItems', { side }, function(items){ aedRequiredItems = items || []; });
+    initAEDRestockRows();
+  });
+  $('aedResetRows').addEventListener('click', initAEDRestockRows);
+  $('aedSubmitAll').addEventListener('click', aedRestockSubmitAll);
 
   $('equipmentSearchBtn').classList.add('searchActionBtn');
   $('equipmentSearchBtn').addEventListener('click', searchEquipmentClient);
