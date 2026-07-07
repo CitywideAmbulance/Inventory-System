@@ -224,6 +224,11 @@
         </div>
         <div><label>Equipment Type</label><select id="equipmentType"><option value="">-- select type --</option></select></div>
         <div><label>Serial Number</label><input id="equipmentSerial" placeholder="Serial number" /></div>
+        <div id="equipmentAEDNumberWrap" style="display:none">
+          <label>AED Number <span style="color:#dc2626">*</span></label>
+          <input id="equipmentAEDNumber" placeholder="e.g. 1, 2, 3..." />
+          <div class="small" style="margin-top:4px;color:#6b7280">Barcode will be: AED{number}==SN:{serial} — matches your pre-printed labels</div>
+        </div>
         <div><label>Make</label><input id="equipmentMake" placeholder="Make" /></div>
         <div><label>Model</label><input id="equipmentModel" placeholder="Model" /></div>
         <div><label>Assigned Location</label><select id="equipmentLocation"><option value="">-- select location --</option></select></div>
@@ -1322,15 +1327,16 @@ function toggleCreateCategoryState(){
 
 // ── Equipment ─────────────────────────────────────────────────────────────────
 function clearEquipmentForm(){
-  ['equipmentBarcode','equipmentSerial','equipmentMake','equipmentModel','equipmentComments'].forEach(id=>{const el=$(id);if(el)el.value='';});
+  ['equipmentBarcode','equipmentSerial','equipmentMake','equipmentModel','equipmentComments','equipmentAEDNumber'].forEach(id=>{const el=$(id);if(el)el.value='';});
   ['equipmentType','equipmentLocation','equipmentCurrentStatus','equipmentServiceReason'].forEach(id=>{const el=$(id);if(el)el.value='';});
   ['equipmentDateShipped','equipmentDateReturned','equipmentInServiceDate','equipmentUpcomingServiceDate'].forEach(id=>{const el=$(id);if(el)el.value='';});
   $('equipmentOOSSection').style.display='none';
   $('equipmentActiveSection').style.display='none';
+  const aedWrap=$('equipmentAEDNumberWrap'); if(aedWrap) aedWrap.style.display='none';
   setEquipmentLocked(false);
 }
 function setEquipmentLocked(locked){
-  ['equipmentType','equipmentSerial','equipmentMake','equipmentModel'].forEach(id=>{const el=$(id);if(el)el.disabled=!!locked;});
+  ['equipmentType','equipmentSerial','equipmentMake','equipmentModel','equipmentAEDNumber'].forEach(id=>{const el=$(id);if(el)el.disabled=!!locked;});
 }
 function normalizeEquipmentStatus(v){ return String(v||'').trim().toLowerCase(); }
 function updateEquipmentStatusUI(){
@@ -1341,6 +1347,13 @@ function updateEquipmentStatusUI(){
   $('equipmentActiveSection').style.display=active?'block':'none';
   ['equipmentServiceReason','equipmentComments','equipmentDateShipped'].forEach(id=>{const el=$(id);if(el)el.disabled=!oos;});
   ['equipmentDateReturned','equipmentInServiceDate','equipmentUpcomingServiceDate'].forEach(id=>{const el=$(id);if(el)el.disabled=!active;});
+}
+function updateEquipmentTypeUI(){
+  const type = ($('equipmentType') ? $('equipmentType').value : '').toLowerCase();
+  const isAED = type.includes('aed');
+  const wrap = $('equipmentAEDNumberWrap');
+  if(wrap) wrap.style.display = isAED ? 'block' : 'none';
+  if(!isAED && $('equipmentAEDNumber')) $('equipmentAEDNumber').value = '';
 }
 function fillEquipmentForm(rec, lockBasic){
   $('equipmentBarcode').value=rec.barcode||'';
@@ -1358,6 +1371,12 @@ function fillEquipmentForm(rec, lockBasic){
   $('equipmentUpcomingServiceDate').value=rec.upcomingServiceDate||'';
   setEquipmentLocked(!!lockBasic);
   updateEquipmentStatusUI();
+  updateEquipmentTypeUI();
+  // For AED equipment: extract AED number from barcode "AED{n}==SN:..."
+  if(rec.equipmentType && rec.equipmentType.toLowerCase().includes('aed') && rec.barcode){
+    const m = rec.barcode.match(/^AED(.+)==SN:/i);
+    if(m && $('equipmentAEDNumber')) $('equipmentAEDNumber').value = m[1];
+  }
 }
 function searchEquipmentClient(){
   const btn=$('equipmentSearchBtn');
@@ -1374,12 +1393,14 @@ function saveEquipmentClient(){
   disableButton(btn, ()=>new Promise((resolve)=>{
     const status=$('equipmentCurrentStatus').value||'';
     const norm=normalizeEquipmentStatus(status);
-    const payload={ equipmentType:($('equipmentType').value||'').trim(), serialNumber:($('equipmentSerial').value||'').trim(), make:($('equipmentMake').value||'').trim(), model:($('equipmentModel').value||'').trim(), assignedLocation:($('equipmentLocation').value||'').trim(), currentStatus:status, serviceReason:'', comments:'', dateShipped:'', dateReturned:'', inServiceDate:'', upcomingServiceDate:'' };
+    const isAEDType = ($('equipmentType').value||'').toLowerCase().includes('aed');
+    const payload={ equipmentType:($('equipmentType').value||'').trim(), serialNumber:($('equipmentSerial').value||'').trim(), make:($('equipmentMake').value||'').trim(), model:($('equipmentModel').value||'').trim(), assignedLocation:($('equipmentLocation').value||'').trim(), currentStatus:status, aedNumber: isAEDType ? ($('equipmentAEDNumber').value||'').trim() : '', serviceReason:'', comments:'', dateShipped:'', dateReturned:'', inServiceDate:'', upcomingServiceDate:'' };
     if(norm==='oos'||norm==='out of service'||norm==='out-of-service'){ payload.serviceReason=($('equipmentServiceReason').value||'').trim(); payload.comments=($('equipmentComments').value||'').trim(); payload.dateShipped=($('equipmentDateShipped').value||'').trim(); }
     else if(norm==='active'||norm==='in service'||norm==='in-service'){ payload.dateReturned=($('equipmentDateReturned').value||'').trim(); payload.inServiceDate=($('equipmentInServiceDate').value||'').trim(); payload.upcomingServiceDate=($('equipmentUpcomingServiceDate').value||'').trim(); }
     if(!payload.equipmentType){ alert('Equipment Type is required'); resolve(); return; }
     if(!payload.serialNumber){ alert('Serial Number is required'); resolve(); return; }
     if(!payload.assignedLocation){ alert('Assigned Location is required'); resolve(); return; }
+    if(isAEDType && !payload.aedNumber){ alert('AED Number is required for AED equipment'); resolve(); return; }
     jsonpCall('saveEquipment', payload, function(res){
       if(!res||res.success===false){ alert((res&&res.message)?res.message:'Equipment save failed'); resolve(); return; }
       clearEquipmentForm(); refreshAll(); alert(res.message||'Equipment saved'); resolve();
@@ -2466,6 +2487,7 @@ window.onload = function(){
   $('equipmentSave').addEventListener('click', saveEquipmentClient);
   $('equipmentClear').addEventListener('click', clearEquipmentForm);
   $('equipmentCurrentStatus').addEventListener('change', updateEquipmentStatusUI);
+  $('equipmentType').addEventListener('change', updateEquipmentTypeUI);
 
   $('narcMode').addEventListener('change', function(){ toggleNarcMode(); if(this.value==='verify') loadNarcVerifyRows(); });
   $('narcLocation').addEventListener('change', loadNarcLookups);
