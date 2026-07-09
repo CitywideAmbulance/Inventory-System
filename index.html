@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.14</title>
+  <title>Citywide Inventory — Web App v2.15</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -79,6 +79,14 @@
     .rowScannerContainer{border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:8px;background:#fff}
     .signedInWrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
     .cabinet-section-header{background:#e8f0fe;padding:8px 12px;font-weight:700;color:#1e40af;border-radius:6px;margin-top:12px;margin-bottom:4px}
+    /* ── Print styles for AED labels ── */
+    @media print{
+      .topbar,.wrap>*:not(#dashboardCard),#dashboardCard>*:not(.tableWrap){ display:none!important }
+      #dashTableWrap{ border:none!important;padding:0!important;overflow:visible!important }
+      #aedLabelGrid{ gap:4px!important }
+      #aedLabelGrid>div{ width:190px!important;border:1px solid #000!important }
+      .btn{ display:none!important }
+    }
   </style>
 </head>
 <body>
@@ -86,7 +94,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.14</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.15</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -123,6 +131,8 @@
             <option value="kits">Kits (select one)</option>
             <option value="fleet">Fleet Parts</option>
             <option value="aed">AED (select one)</option>
+            <option value="aeddoh">AED DOH Printout</option>
+            <option value="aedlabel">AED Label Printout</option>
           </select>
         </label>
       </div>
@@ -1056,6 +1066,8 @@ function renderDashboard(){
     else if(view === 'vehicles') { renderDashboardVehicles(done); }
     else if(view === 'fleet')    { renderDashboardFleet(done); }
     else if(view === 'aed')      { renderDashboardAED(done);   }
+    else if(view === 'aeddoh')   { renderDashboardAEDDOH(done);   }
+    else if(view === 'aedlabel') { renderDashboardAEDLabel(done); }
     else                         { renderDashboardBags(done); }
   });
 }
@@ -1309,6 +1321,218 @@ function createItemClient(){
       clearCreateForm(); refreshAll(); alert(res.message||'Saved'); resolve();
     });
   }));
+}
+
+// ── AED DOH Printout + Label Printout ────────────────────────────────────────
+
+/** Formats "YYYY-MM-DD" → "M/D/YY" (matches DOH document style). */
+function _aedFmtDate(ymd){
+  if(!ymd || ymd === '-') return '—';
+  const p = ymd.split('-');
+  if(p.length !== 3) return ymd;
+  return parseInt(p[1]) + '/' + parseInt(p[2]) + '/' + p[0].slice(2);
+}
+
+/** Builds a DOH cell HTML string with color coding by expiry. */
+function _aedDOHCell(item){
+  if(!item || item.value === '-') return '<td style="color:#94a3b8;text-align:center;font-size:11px">—</td>';
+  if(!item.expires) return '<td style="text-align:center;font-size:12px">' + esc(item.value) + '</td>';
+  const d = item.days;
+  let st = 'text-align:center;font-size:11px;';
+  if(d !== null && d !== undefined){
+    if(d < 0)   st += 'background:#fee2e2;color:#dc2626;font-weight:700;';
+    else if(d <= 30) st += 'background:#fef3c7;color:#b45309;font-weight:700;';
+  }
+  return '<td style="' + st + '">' + esc(_aedFmtDate(item.exp || item.value)) + '</td>';
+}
+
+function renderDashboardAEDDOH(done){
+  done = done || function(){};
+  const body = $('dashboardBody'), head = $('dashboardHead').querySelector('tr');
+  head.innerHTML = '';
+  body.innerHTML = '';
+  showDashSpinner_(5, 'Loading AED DOH data…');
+  done();
+
+  jsonpCall('getAllAEDContents', null, function(results){
+    body.innerHTML = '';
+    if(!results || !results.length){
+      head.innerHTML = '<th>AED</th>';
+      body.innerHTML = '<tr><td class="small">No AED data — add AEDs via Equipment Inventory first</td></tr>';
+      return;
+    }
+    const first = results[0];
+    const cwHdrs = first.cwContents.map(c => c.name);
+    const bcHdrs = first.bcContents.map(c => c.name);
+
+    // Build wide header
+    head.innerHTML =
+      '<th style="position:sticky;left:0;z-index:2;background:#f3f6fb;white-space:nowrap">AED # / SN</th>' +
+      '<th style="position:sticky;left:140px;z-index:2;background:#f3f6fb;white-space:nowrap">Status</th>' +
+      cwHdrs.map(h => '<th style="font-size:10px;white-space:nowrap;background:#e0f2fe;color:#0369a1" title="CW: ' + esc(h) + '">' + esc(h) + '</th>').join('') +
+      bcHdrs.map(h => '<th style="font-size:10px;white-space:nowrap;background:#ede9fe;color:#7c3aed" title="BC: ' + esc(h) + '">' + esc(h) + '</th>').join('');
+
+    results.forEach(r => {
+      const tr = document.createElement('tr');
+      const stLow = (r.status||'').toLowerCase();
+      const stColor = stLow.includes('in service') ? '#16a34a' :
+                      stLow.includes('lost') ? '#dc2626' :
+                      stLow.includes('damaged') ? '#b45309' : '#6b7280';
+
+      let html =
+        '<td style="position:sticky;left:0;z-index:1;background:#fff;font-weight:700;white-space:nowrap;font-size:12px">' +
+          esc(r.aedNumber) + '<br><span style="font-weight:400;font-size:10px;color:#64748b">' + esc(r.barcode) + '</span></td>' +
+        '<td style="position:sticky;left:140px;z-index:1;background:#fff;color:' + stColor + ';font-weight:600;white-space:nowrap;font-size:12px">' + esc(r.status) + '</td>';
+
+      r.cwContents.forEach(item => { html += _aedDOHCell(item); });
+      r.bcContents.forEach(item => { html += _aedDOHCell(item); });
+
+      tr.innerHTML = html;
+      body.appendChild(tr);
+    });
+  });
+}
+
+function renderDashboardAEDLabel(done){
+  done = done || function(){};
+  const body = $('dashboardBody'), head = $('dashboardHead').querySelector('tr');
+  head.innerHTML = '<th style="background:#fff;border:none"></th>';
+  body.innerHTML = '';
+  showDashSpinner_(2, 'Building AED labels…');
+  done();
+
+  jsonpCall('getAllAEDContents', null, function(results){
+    body.innerHTML = '';
+    if(!results || !results.length){
+      body.innerHTML = '<tr><td class="small">No AED data</td></tr>';
+      return;
+    }
+
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.style.cssText = 'padding:8px;vertical-align:top';
+
+    // Print button
+    const printBtn = document.createElement('button');
+    printBtn.className = 'btn secondary small';
+    printBtn.style.marginBottom = '12px';
+    printBtn.textContent = '🖨 Print Labels';
+    printBtn.onclick = function(){ window.print(); };
+    td.appendChild(printBtn);
+
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px';
+    grid.id = 'aedLabelGrid';
+
+    results.forEach(r => {
+      const stLow = (r.status||'').toLowerCase();
+      const isLeb = stLow === 'leb' || stLow.includes('@leb') || stLow.includes('leb');
+      const isInService = r.isInService;
+
+      const card = document.createElement('div');
+      card.style.cssText =
+        'width:200px;border:1px solid #000;border-radius:3px;padding:6px 5px;' +
+        'font-family:Arial,sans-serif;font-size:10px;line-height:1.35;background:#fff;' +
+        'page-break-inside:avoid;display:flex;gap:4px';
+
+      if(isLeb){
+        // Simplified label — image 2 style
+        card.innerHTML =
+          '<div style="flex:1;text-align:center">' +
+            '<div style="font-weight:800;font-size:11px;border-bottom:1px solid #000;' +
+                 'margin-bottom:6px;padding-bottom:3px">RAPID EMS</div>' +
+            '<div style="margin-top:8px;font-weight:700;font-size:13px">' + esc(r.aedNumber) + '</div>' +
+            '<div style="margin-top:2px">SN:</div>' +
+            '<div style="font-weight:700">' + esc(r.serialNumber) + '</div>' +
+          '</div>' +
+          '<div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);' +
+               'background:#7c3aed;color:#fff;font-weight:700;font-size:10px;text-align:center;' +
+               'padding:3px 2px;border-radius:2px;min-width:18px">' + esc(r.status) + '</div>';
+
+      } else if(isInService){
+        // Full label — image 1 style
+        // Use CW contents (primary); if empty use BC
+        const content = (r.cwContents && r.cwContents.some(x => x.value !== '-'))
+          ? r.cwContents : r.bcContents;
+
+        // Find expiring/expired items (≤30 days or already expired)
+        const expiringSoon = content.filter(x => x.expires && x.days !== null && x.days >= 0 && x.days <= 30);
+        const expired      = content.filter(x => x.expires && x.days !== null && x.days < 0);
+
+        // Left side — content list
+        let leftHtml = '';
+        content.forEach(item => {
+          if(!item.expires){
+            leftHtml += '<div>' + esc(_aedLabelShortName(item.name)) + ':' + esc(item.value) + '</div>';
+          } else {
+            const d = item.days;
+            let color = '';
+            if(d !== null){ if(d < 0) color = '#dc2626'; else if(d <= 30) color = '#b45309'; }
+            const displayDate = _aedFmtDate(item.exp || item.value);
+            leftHtml += '<div style="color:' + (color||'inherit') + '">' +
+              esc(_aedLabelShortName(item.name)) + ':' + esc(displayDate) + '</div>';
+          }
+        });
+        // Footer
+        leftHtml +=
+          '<div style="border-top:1px solid #000;margin-top:3px;padding-top:2px;font-weight:700">' + esc(r.aedNumber) + '</div>' +
+          '<div>' + esc(r.serialNumber) + '</div>' +
+          '<div>======</div>' +
+          (r.assignedLocation ? '<div>' + esc(r.assignedLocation) + '</div>' : '');
+
+        // Right side — status + expiry warnings
+        const stBg = '#16a34a';
+        let rightHtml = '<div style="font-weight:700;font-size:9px;text-align:center;margin-bottom:4px">' + esc(r.status) + '</div>';
+        if(expiringSoon.length){
+          rightHtml += '<div style="color:#b45309;font-size:8px;font-weight:700;margin-top:4px">⚠ ≤30d:</div>';
+          expiringSoon.forEach(x => {
+            rightHtml += '<div style="color:#b45309;font-size:8px">' + esc(_aedLabelShortName(x.name)) + '<br>' + esc(_aedFmtDate(x.exp)) + '</div>';
+          });
+        }
+        if(expired.length){
+          rightHtml += '<div style="color:#dc2626;font-size:8px;font-weight:700;margin-top:4px">❌ EXP:</div>';
+          expired.forEach(x => {
+            rightHtml += '<div style="color:#dc2626;font-size:8px">' + esc(_aedLabelShortName(x.name)) + '<br>' + esc(_aedFmtDate(x.exp)) + '</div>';
+          });
+        }
+
+        card.innerHTML =
+          '<div style="flex:1">' + leftHtml + '</div>' +
+          '<div style="min-width:44px;max-width:54px;background:#7c3aed;color:#fff;' +
+               'border-radius:2px;padding:3px;font-size:8px">' + rightHtml + '</div>';
+
+      } else {
+        // Other status (Lost, Damaged, Spare, Unknown)
+        card.innerHTML =
+          '<div style="flex:1;text-align:center">' +
+            '<div style="font-weight:700;font-size:12px;margin-bottom:4px">' + esc(r.aedNumber) + '</div>' +
+            '<div style="font-size:10px;color:#64748b">SN: ' + esc(r.serialNumber) + '</div>' +
+            '<div style="margin-top:6px;font-weight:600;font-size:10px;color:#dc2626">' + esc(r.status) + '</div>' +
+          '</div>' +
+          '<div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);' +
+               'background:#dc2626;color:#fff;font-weight:700;font-size:9px;text-align:center;' +
+               'padding:3px 2px;border-radius:2px;min-width:18px">' + esc(r.status) + '</div>';
+      }
+
+      grid.appendChild(card);
+    });
+
+    td.appendChild(grid);
+    tr.appendChild(td);
+    body.appendChild(tr);
+  });
+}
+
+/** Shorten AED item names for compact label display. */
+function _aedLabelShortName(name){
+  return (name||'')
+    .replace(/^PED AED Pad$/i,   'PED Pad')
+    .replace(/^Adult AED Pad$/i, 'Adult Pad')
+    .replace(/^Glucose Strip$/i, 'G.Strip')
+    .replace(/^Ipratroprium$/i,  'Ipratrop')
+    .replace(/^Glucometer$/i,    'Glucom')
+    .replace(/^Thermometer$/i,   'Therm')
+    .replace(/^Narcan Kit$/i,    'Narcan');
 }
 
 // ── Create Item helpers ──────────────────────────────────────────────────────
