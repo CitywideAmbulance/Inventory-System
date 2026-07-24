@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.15</title>
+  <title>Citywide Inventory — Web App v2.16</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -94,7 +94,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.15</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.16</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -847,6 +847,8 @@ function handleSignIn(response){
 }
 
 function refreshAll(){
+  // Clear lazy-loaded view data so next view render re-fetches fresh data
+  if(dashboardData){ dashboardData.stock = null; dashboardData.equipment = null; dashboardData.narcs = null; }
   loadDashboardData();
   loadRequiredItems();
   loadBagList();
@@ -856,15 +858,34 @@ function refreshAll(){
   loadCategories();
   loadEquipmentLookups();
   loadNarcLookups();
-  initRestockRows();
-  initNarcKitRows();
+  // Note: initRestockRows / initNarcKitRows not called here — they reset forms.
+  // Call them explicitly when needed (Reset buttons, page load).
+}
+
+// ── Selective refresh helpers (Option 6) ─────────────────────────────────────
+function refreshStockOnly(){
+  if(dashboardData) dashboardData.stock = null; // force re-fetch on next Items render
+  const v = $('dashboardViewSelect') ? $('dashboardViewSelect').value : '';
+  if(v === 'items') dashTransition_(function(done){ renderDashboardItems(done); });
+}
+function refreshEquipmentOnly(){
+  if(dashboardData) dashboardData.equipment = null;
+  const v = $('dashboardViewSelect') ? $('dashboardViewSelect').value : '';
+  if(v === 'equipment') dashTransition_(function(done){ renderDashboardEquipment(done); });
+}
+function refreshNarcsOnly(){
+  if(dashboardData) dashboardData.narcs = null;
+  const v = $('dashboardViewSelect') ? $('dashboardViewSelect').value : '';
+  if(v === 'narcs') dashTransition_(function(done){ renderDashboardNarcs(done); });
 }
 
 // ── Data loaders ──────────────────────────────────────────────────────────────
 function loadDashboardData(){
-  showDashSkeleton_(7, 8);
+  showDashSkeleton_(4, 6);
   jsonpCall('getDashboardData', null, function(resp){
-    dashboardData = resp || { stock:[], required:[], bags:[], vehicles:[], equipment:[], narcs:[], narcKits:[] };
+    // getDashboardData is now lightweight — stock/equipment/narcs lazy-loaded per view
+    const prev = dashboardData || {};
+    dashboardData = Object.assign({ stock: prev.stock||null, equipment: prev.equipment||null, narcs: prev.narcs||null }, resp || { bags:[], vehicles:[], aedList:[], narcKits:[] });
     populateDashboardBagSelect();
     populateDashboardVehicleSelect();
     populateDashboardNarcKitSelect();
@@ -1059,9 +1080,9 @@ function onDashboardViewToggle(){
 function renderDashboard(){
   const view = $('dashboardViewSelect').value || 'items';
   dashTransition_(function(done){
-    if(view === 'items')         { renderDashboardItems();        done(); }
-    else if(view === 'equipment'){ renderDashboardEquipment();    done(); }
-    else if(view === 'narcs')    { renderDashboardNarcs();        done(); }
+    if(view === 'items')         { renderDashboardItems(done); }
+    else if(view === 'equipment'){ renderDashboardEquipment(done); }
+    else if(view === 'narcs')    { renderDashboardNarcs(done); }
     else if(view === 'kits')     { renderDashboardKits(done); }
     else if(view === 'vehicles') { renderDashboardVehicles(done); }
     else if(view === 'fleet')    { renderDashboardFleet(done); }
@@ -1072,12 +1093,24 @@ function renderDashboard(){
   });
 }
 
-function renderDashboardItems(){
+function renderDashboardItems(done){
+  done = done || function(){};
   const body=$('dashboardBody'), head=$('dashboardHead').querySelector('tr');
   head.innerHTML = '<th>Item Name</th><th>Barcode</th><th>Lot</th><th>Expiration</th><th>Remaining</th><th>Category</th><th>Location</th><th>Status</th>';
-  if(!dashboardData || !dashboardData.stock){ body.innerHTML='<tr><td class="small">No data</td></tr>'; return; }
+  if(!dashboardData || !dashboardData.stock){
+    showDashSpinner_(8, 'Loading stock…'); done();
+    jsonpCall('getInventoryStockDashboard', null, function(data){
+      if(dashboardData) dashboardData.stock = data || [];
+      _renderItemsNow_();
+    });
+    return;
+  }
+  done(); _renderItemsNow_();
+}
+function _renderItemsNow_(){
+  const body=$('dashboardBody');
   const hideExpired=$('hideExpired').checked, hideOutOfStock=$('hideOutOfStock').checked;
-  let rows = dashboardData.stock;
+  let rows = (dashboardData && dashboardData.stock) || [];
   if(hideExpired) rows = rows.filter(r => r.status !== 'Expired');
   if(hideOutOfStock) rows = rows.filter(r => r.remaining > 0);
   if(rows.length===0){ body.innerHTML='<tr><td colspan="8" class="small">No stock</td></tr>'; return; }
@@ -1091,11 +1124,23 @@ function renderDashboardItems(){
   });
 }
 
-function renderDashboardEquipment(){
+function renderDashboardEquipment(done){
+  done = done || function(){};
   const body=$('dashboardBody'), head=$('dashboardHead').querySelector('tr');
   head.innerHTML='<th>Barcode</th><th>Equipment Type</th><th>Serial Number</th><th>Make</th><th>Model</th><th>Assigned Location</th><th>Status</th><th>Status Date</th>';
-  if(!dashboardData || !dashboardData.equipment){ body.innerHTML='<tr><td colspan="8" class="small">No equipment</td></tr>'; return; }
-  const rows=dashboardData.equipment.slice().sort((a,b)=>(a.equipmentType||'').localeCompare(b.equipmentType||'')||(a.barcode||'').localeCompare(b.barcode||''));
+  if(!dashboardData || !dashboardData.equipment){
+    showDashSpinner_(8, 'Loading equipment…'); done();
+    jsonpCall('getEquipmentDashboard', null, function(data){
+      if(dashboardData) dashboardData.equipment = data || [];
+      _renderEquipmentNow_();
+    });
+    return;
+  }
+  done(); _renderEquipmentNow_();
+}
+function _renderEquipmentNow_(){
+  const body=$('dashboardBody');
+  const rows=((dashboardData&&dashboardData.equipment)||[]).slice().sort((a,b)=>(a.equipmentType||'').localeCompare(b.equipmentType||'')||(a.barcode||'').localeCompare(b.barcode||''));
   if(!rows.length){ body.innerHTML='<tr><td colspan="8" class="small">No equipment</td></tr>'; return; }
   body.innerHTML='';
   rows.forEach(r=>{
@@ -1105,12 +1150,24 @@ function renderDashboardEquipment(){
   });
 }
 
-function renderDashboardNarcs(){
+function renderDashboardNarcs(done){
+  done = done || function(){};
   const body=$('dashboardBody'), head=$('dashboardHead').querySelector('tr');
   head.innerHTML='<th>Narc Name</th><th>Barcode</th><th>Lot Number</th><th>Expiration</th><th>Quantity</th><th>Location</th><th>Status</th>';
-  if(!dashboardData || !dashboardData.narcs){ body.innerHTML='<tr><td colspan="7" class="small">No narc stock</td></tr>'; return; }
+  if(!dashboardData || !dashboardData.narcs){
+    showDashSpinner_(7, 'Loading narcs…'); done();
+    jsonpCall('getNarcsDashboard', null, function(data){
+      if(dashboardData) dashboardData.narcs = data || [];
+      _renderNarcsNow_();
+    });
+    return;
+  }
+  done(); _renderNarcsNow_();
+}
+function _renderNarcsNow_(){
+  const body=$('dashboardBody');
   const hideExpired=$('hideExpired').checked, hideOutOfStock=$('hideOutOfStock').checked;
-  let rows=(dashboardData.narcs||[]).filter(r=>{
+  let rows=((dashboardData&&dashboardData.narcs)||[]).filter(r=>{
     if(String(r.name||'').includes('[Removed]')) return false;
     if(hideExpired && r.status==='Expired') return false;
     if(hideOutOfStock && Number(r.quantity||0)<=0) return false;
@@ -1318,7 +1375,7 @@ function createItemClient(){
     if(!payload.location){ alert('Location (stockroom) is required'); resolve(); return; }
     jsonpCall('createItem', payload, function(res){
       if(!res||res.success===false){ alert((res&&res.message)?res.message:'Create failed'); resolve(); return; }
-      clearCreateForm(); refreshAll(); alert(res.message||'Saved'); resolve();
+      clearCreateForm(); refreshStockOnly(); alert(res.message||'Saved'); resolve();
     });
   }));
 }
@@ -1627,7 +1684,7 @@ function saveEquipmentClient(){
     if(isAEDType && !payload.aedNumber){ alert('AED Number is required for AED equipment'); resolve(); return; }
     jsonpCall('saveEquipment', payload, function(res){
       if(!res||res.success===false){ alert((res&&res.message)?res.message:'Equipment save failed'); resolve(); return; }
-      clearEquipmentForm(); refreshAll(); alert(res.message||'Equipment saved'); resolve();
+      clearEquipmentForm(); refreshEquipmentOnly(); alert(res.message||'Equipment saved'); resolve();
     });
   }));
 }
@@ -1640,7 +1697,7 @@ function saveNarcClient(){
     const payload={ name:$('narcName').value||'', barcode:$('narcBarcode').value||'', lot:$('narcLot').value||'', exp:$('narcExp').value||'', qty:Number($('narcQty').value||0), location:$('narcLocation').value||'' };
     jsonpCall('saveNarc', payload, function(res){
       if(!res||res.success===false){ alert((res&&res.message)?res.message:'Save failed'); resolve(); return; }
-      clearNarcForm(); alert(res.message||'Saved'); refreshAll(); resolve();
+      clearNarcForm(); alert(res.message||'Saved'); refreshNarcsOnly(); resolve();
     });
   }));
 }
@@ -1683,7 +1740,7 @@ function submitNarcVerifyClient(){
     if(entries.length===0){ alert('No active items selected'); resolve(); return; }
     jsonpCall('submitNarcKitVerification', entries, function(res){
       if(!res||res.success===false){ alert((res&&res.message)?res.message:'Submit failed'); resolve(); return; }
-      alert(res.message||'Verification saved'); loadNarcVerifyRows(); refreshAll(); resolve();
+      alert(res.message||'Verification saved'); loadNarcVerifyRows(); refreshNarcsOnly(); resolve();
     });
   }));
 }
@@ -2040,7 +2097,7 @@ function submitAll(){
     if(entries.length===0){ alert('No valid items to submit'); resolve(); return; }
     jsonpCall('submitBag', entries, function(res){
       if(!res||res.success===false){ alert((res&&res.message)?res.message:'Submit failed'); resolve(); return; }
-      alert(res.message||'Submitted'); initRestockRows(); refreshAll(); resolve();
+      alert(res.message||'Submitted'); initRestockRows(); refreshStockOnly(); resolve();
     });
   }));
 }
@@ -2126,7 +2183,7 @@ function cabinetSubmitAll(){
     if(entries.length===0){ alert('No valid items to submit'); resolve(); return; }
     jsonpCall('submitVehicleCabinet', entries, function(res){
       if(!res||res.success===false){ alert((res&&res.message)?res.message:'Submit failed'); resolve(); return; }
-      alert(res.message||'Submitted'); initCabinetRestockRows(); refreshAll(); resolve();
+      alert(res.message||'Submitted'); initCabinetRestockRows(); refreshStockOnly(); resolve();
     });
   }));
 }
@@ -2211,7 +2268,7 @@ function aedRestockSubmitAll(){
     if(entries.length===0){ alert('No valid items to submit'); resolve(); return; }
     jsonpCall('submitAEDRestock', entries, function(res){
       if(!res||res.success===false){ alert((res&&res.message)?res.message:'Submit failed'); resolve(); return; }
-      alert(res.message||'Submitted'); initAEDRestockRows(); refreshAll(); resolve();
+      alert(res.message||'Submitted'); initAEDRestockRows(); refreshStockOnly(); resolve();
     });
   }));
 }
@@ -2343,7 +2400,7 @@ function submitNarcKitClient(){
     if(entries.length===0){ alert('No valid items to submit'); resolve(); return; }
     jsonpCall('submitNarcKit', entries, function(res){
       if(!res||res.success===false){ alert((res&&res.message)?res.message:'Submit failed'); resolve(); return; }
-      alert(res.message||'Submitted'); initNarcKitRows(); refreshAll(); resolve();
+      alert(res.message||'Submitted'); initNarcKitRows(); refreshNarcsOnly(); resolve();
     });
   }));
 }
@@ -2497,7 +2554,7 @@ function confirmTransfer(){
         alert(res.message || 'Issued to employee');
         _resetTransferForm();
         loadTransferLog();
-        refreshAll();
+      refreshStockOnly();
         resolve();
       });
     }));
@@ -2523,7 +2580,7 @@ function confirmTransfer(){
       alert(res.message || 'Transfer complete');
       _resetTransferForm();
       loadTransferLog();
-      refreshAll();
+      refreshStockOnly();
       resolve();
     });
   }));
