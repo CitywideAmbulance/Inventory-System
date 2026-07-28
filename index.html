@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.16</title>
+  <title>Citywide Inventory — Web App v2.17</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -94,7 +94,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.16</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.17</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -139,6 +139,7 @@
       <div class="filter-row">
         <label><input type="checkbox" id="hideExpired" checked> Exclude expired items</label>
         <label><input type="checkbox" id="hideOutOfStock"> Exclude out of stock items</label>
+        <label><input type="checkbox" id="hideOOSEquipment"> Exclude OOS / Lost equipment</label>
       </div>
       <div id="bagSelectorWrap" style="margin-top:8px;display:none">
         <label>Select Bag</label>
@@ -1127,7 +1128,7 @@ function _renderItemsNow_(){
 function renderDashboardEquipment(done){
   done = done || function(){};
   const body=$('dashboardBody'), head=$('dashboardHead').querySelector('tr');
-  head.innerHTML='<th>Barcode</th><th>Equipment Type</th><th>Serial Number</th><th>Make</th><th>Model</th><th>Assigned Location</th><th>Status</th><th>Status Date</th>';
+  head.innerHTML='<th>Barcode</th><th>Equipment Type</th><th>Serial Number</th><th>Make</th><th>Model</th><th>Assigned Location</th><th>Status</th><th>Status Date</th><th>Upcoming Service</th>';
   if(!dashboardData || !dashboardData.equipment){
     showDashSpinner_(8, 'Loading equipment…'); done();
     jsonpCall('getEquipmentDashboard', null, function(data){
@@ -1140,12 +1141,23 @@ function renderDashboardEquipment(done){
 }
 function _renderEquipmentNow_(){
   const body=$('dashboardBody');
-  const rows=((dashboardData&&dashboardData.equipment)||[]).slice().sort((a,b)=>(a.equipmentType||'').localeCompare(b.equipmentType||'')||(a.barcode||'').localeCompare(b.barcode||''));
-  if(!rows.length){ body.innerHTML='<tr><td colspan="8" class="small">No equipment</td></tr>'; return; }
+  const hideOOS = $('hideOOSEquipment') ? $('hideOOSEquipment').checked : false;
+  let rows=((dashboardData&&dashboardData.equipment)||[]).slice().sort((a,b)=>(a.equipmentType||'').localeCompare(b.equipmentType||'')||(a.barcode||'').localeCompare(b.barcode||''));
+  if(hideOOS){
+    rows = rows.filter(r => {
+      const s=(r.status||'').toLowerCase();
+      return !s.includes('oos') && !s.includes('out of service') && !s.includes('out-of-service') && !s.includes('lost');
+    });
+  }
+  if(!rows.length){ body.innerHTML='<tr><td colspan="9" class="small">No equipment</td></tr>'; return; }
   body.innerHTML='';
   rows.forEach(r=>{
+    const svcDate = r.upcomingServiceDate ? formatDateMMDDYYYY(r.upcomingServiceDate) : '—';
+    const svcDays = r.upcomingServiceDate ? getDaysUntil(r.upcomingServiceDate) : null;
+    let svcStyle = '';
+    if(svcDays !== null){ if(svcDays < 0) svcStyle='color:#dc2626;font-weight:700'; else if(svcDays <= 30) svcStyle='color:#b45309;font-weight:700'; }
     const tr=document.createElement('tr');
-    tr.innerHTML='<td>'+esc(r.barcode)+'</td><td>'+esc(r.equipmentType)+'</td><td>'+esc(r.serialNumber)+'</td><td>'+esc(r.make)+'</td><td>'+esc(r.model)+'</td><td>'+esc(r.assignedLocation)+'</td><td>'+esc(r.status||'')+'</td><td>'+esc(r.statusDate||'')+'</td>';
+    tr.innerHTML='<td>'+esc(r.barcode)+'</td><td>'+esc(r.equipmentType)+'</td><td>'+esc(r.serialNumber)+'</td><td>'+esc(r.make)+'</td><td>'+esc(r.model)+'</td><td>'+esc(r.assignedLocation)+'</td><td>'+esc(r.status||'')+'</td><td>'+esc(r.statusDate||'')+'</td><td style="'+svcStyle+'">'+esc(svcDate)+'</td>';
     body.appendChild(tr);
   });
 }
@@ -1392,8 +1404,10 @@ function _aedFmtDate(ymd){
 
 /** Builds a DOH cell HTML string with color coding by expiry. */
 function _aedDOHCell(item){
-  if(!item || item.value === '-') return '<td style="color:#94a3b8;text-align:center;font-size:11px">—</td>';
-  if(!item.expires) return '<td style="text-align:center;font-size:12px">' + esc(item.value) + '</td>';
+  if(!item) return '<td style="color:#94a3b8;text-align:center;font-size:11px">—</td>';
+  // Non-expiring items (qty-based): always show value even when '0' or '-'
+  if(!item.expires) return '<td style="text-align:center;font-size:12px">' + esc(item.value === '-' ? '0' : item.value) + '</td>';
+  if(item.value === '-') return '<td style="color:#94a3b8;text-align:center;font-size:11px">—</td>';
   const d = item.days;
   let st = 'text-align:center;font-size:11px;';
   if(d !== null && d !== undefined){
@@ -1424,8 +1438,8 @@ function renderDashboardAEDDOH(done){
 
     // Build wide header
     head.innerHTML =
-      '<th style="position:sticky;left:0;z-index:2;background:#f3f6fb;white-space:nowrap">AED # / SN</th>' +
-      '<th style="position:sticky;left:140px;z-index:2;background:#f3f6fb;white-space:nowrap">Status</th>' +
+      '<th style="position:sticky;left:0;z-index:2;background:#f3f6fb;white-space:nowrap;min-width:170px;width:170px">AED # / SN</th>' +
+      '<th style="position:sticky;left:170px;z-index:2;background:#f3f6fb;white-space:nowrap;min-width:110px">Status</th>' +
       cwHdrs.map(h => '<th style="font-size:10px;white-space:nowrap;background:#e0f2fe;color:#0369a1" title="CW: ' + esc(h) + '">' + esc(h) + '</th>').join('') +
       bcHdrs.map(h => '<th style="font-size:10px;white-space:nowrap;background:#ede9fe;color:#7c3aed" title="BC: ' + esc(h) + '">' + esc(h) + '</th>').join('');
 
@@ -1437,9 +1451,9 @@ function renderDashboardAEDDOH(done){
                       stLow.includes('damaged') ? '#b45309' : '#6b7280';
 
       let html =
-        '<td style="position:sticky;left:0;z-index:1;background:#fff;font-weight:700;white-space:nowrap;font-size:12px">' +
+        '<td style="position:sticky;left:0;z-index:1;background:#fff;font-weight:700;white-space:nowrap;font-size:12px;min-width:170px;width:170px">' +
           esc(r.aedNumber) + '<br><span style="font-weight:400;font-size:10px;color:#64748b">' + esc(r.barcode) + '</span></td>' +
-        '<td style="position:sticky;left:140px;z-index:1;background:#fff;color:' + stColor + ';font-weight:600;white-space:nowrap;font-size:12px">' + esc(r.status) + '</td>';
+        '<td style="position:sticky;left:170px;z-index:1;background:#fff;color:' + stColor + ';font-weight:600;white-space:nowrap;font-size:12px;min-width:110px">' + esc(r.status) + '</td>';
 
       r.cwContents.forEach(item => { html += _aedDOHCell(item); });
       r.bcContents.forEach(item => { html += _aedDOHCell(item); });
@@ -1520,7 +1534,8 @@ function renderDashboardAEDLabel(done){
         let leftHtml = '';
         content.forEach(item => {
           if(!item.expires){
-            leftHtml += '<div>' + esc(_aedLabelShortName(item.name)) + ':' + esc(item.value) + '</div>';
+            // Non-expiring: show qty (treat '-' as '0' when no data)
+            leftHtml += '<div>' + esc(_aedLabelShortName(item.name)) + ':' + esc(item.value === '-' ? '0' : item.value) + '</div>';
           } else {
             const d = item.days;
             let color = '';
@@ -1539,19 +1554,8 @@ function renderDashboardAEDLabel(done){
 
         // Right side — status + expiry warnings
         const stBg = '#16a34a';
-        let rightHtml = '<div style="font-weight:700;font-size:9px;text-align:center;margin-bottom:4px">' + esc(r.status) + '</div>';
-        if(expiringSoon.length){
-          rightHtml += '<div style="color:#b45309;font-size:8px;font-weight:700;margin-top:4px">⚠ ≤30d:</div>';
-          expiringSoon.forEach(x => {
-            rightHtml += '<div style="color:#b45309;font-size:8px">' + esc(_aedLabelShortName(x.name)) + '<br>' + esc(_aedFmtDate(x.exp)) + '</div>';
-          });
-        }
-        if(expired.length){
-          rightHtml += '<div style="color:#dc2626;font-size:8px;font-weight:700;margin-top:4px">❌ EXP:</div>';
-          expired.forEach(x => {
-            rightHtml += '<div style="color:#dc2626;font-size:8px">' + esc(_aedLabelShortName(x.name)) + '<br>' + esc(_aedFmtDate(x.exp)) + '</div>';
-          });
-        }
+        // Right panel: status only — expiry already shown via color in left panel
+        const rightHtml = '<div style="font-weight:700;font-size:9px;text-align:center">' + esc(r.status) + '</div>';
 
         card.innerHTML =
           '<div style="flex:1">' + leftHtml + '</div>' +
@@ -2741,6 +2745,7 @@ window.onload = function(){
   if($('narcVerifySelect')) $('narcVerifySelect').addEventListener('change', ()=>loadNarcVerifyRows());
   $('hideExpired').addEventListener('change', renderDashboard);
   $('hideOutOfStock').addEventListener('change', renderDashboard);
+  $('hideOOSEquipment').addEventListener('change', renderDashboard);
   $('createCloseCam').addEventListener('click', stopScanner);
   $('equipmentCloseCam').addEventListener('click', stopScanner);
   $('createSave').addEventListener('click', createItemClient);
