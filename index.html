@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.17</title>
+  <title>Citywide Inventory — Web App v2.18</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -94,7 +94,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.17</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.18</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -138,8 +138,8 @@
       </div>
       <div class="filter-row">
         <label><input type="checkbox" id="hideExpired" checked> Exclude expired items</label>
-        <label><input type="checkbox" id="hideOutOfStock"> Exclude out of stock items</label>
-        <label><input type="checkbox" id="hideOOSEquipment"> Exclude OOS / Lost equipment</label>
+        <label><input type="checkbox" id="hideOutOfStock" checked> Exclude out of stock items</label>
+        <label><input type="checkbox" id="hideOOSEquipment" checked> Exclude OOS / Lost equipment</label>
       </div>
       <div id="bagSelectorWrap" style="margin-top:8px;display:none">
         <label>Select Bag</label>
@@ -1348,7 +1348,7 @@ function renderDashboardAED(done){
     if(!results || !results.length){ body.innerHTML = '<tr><td colspan="4" class="small">No AED data found — restock this AED first</td></tr>'; return; }
     results.forEach(r => {
       const itemsHtml = (r.items||[]).map(it =>
-        '<div style="padding:4px 0">' + esc(formatDateMMDDYYYY(it.exp)||'—') + ' | ' + esc(it.lot||'—') + ' | Qty: ' + esc(it.qty||0) + '</div>'
+        '<div style="padding:4px 0">' + esc(formatDateMMDDYYYY(it.exp)||'—') + ' | ' + esc(it.lot||'—') + '</div>'
       ).join('');
       const tr = document.createElement('tr');
       const pctColor = r.providedQty >= r.requiredQty ? '#16a34a' : r.providedQty > 0 ? '#b45309' : '#dc2626';
@@ -1438,8 +1438,8 @@ function renderDashboardAEDDOH(done){
 
     // Build wide header
     head.innerHTML =
-      '<th style="position:sticky;left:0;z-index:2;background:#f3f6fb;white-space:nowrap;min-width:170px;width:170px">AED # / SN</th>' +
-      '<th style="position:sticky;left:170px;z-index:2;background:#f3f6fb;white-space:nowrap;min-width:110px">Status</th>' +
+      '<th style="position:sticky;left:0;z-index:2;background:#f3f6fb;white-space:nowrap;min-width:130px;width:130px">AED # / SN</th>' +
+      '<th style="position:sticky;left:130px;z-index:2;background:#f3f6fb;white-space:nowrap;min-width:90px">Status</th>' +
       cwHdrs.map(h => '<th style="font-size:10px;white-space:nowrap;background:#e0f2fe;color:#0369a1" title="CW: ' + esc(h) + '">' + esc(h) + '</th>').join('') +
       bcHdrs.map(h => '<th style="font-size:10px;white-space:nowrap;background:#ede9fe;color:#7c3aed" title="BC: ' + esc(h) + '">' + esc(h) + '</th>').join('');
 
@@ -1451,9 +1451,9 @@ function renderDashboardAEDDOH(done){
                       stLow.includes('damaged') ? '#b45309' : '#6b7280';
 
       let html =
-        '<td style="position:sticky;left:0;z-index:1;background:#fff;font-weight:700;white-space:nowrap;font-size:12px;min-width:170px;width:170px">' +
+        '<td style="position:sticky;left:0;z-index:1;background:#fff;font-weight:700;white-space:nowrap;font-size:12px;min-width:130px;width:130px">' +
           esc(r.aedNumber) + '<br><span style="font-weight:400;font-size:10px;color:#64748b">' + esc(r.barcode) + '</span></td>' +
-        '<td style="position:sticky;left:170px;z-index:1;background:#fff;color:' + stColor + ';font-weight:600;white-space:nowrap;font-size:12px;min-width:110px">' + esc(r.status) + '</td>';
+        '<td style="position:sticky;left:130px;z-index:1;background:#fff;color:' + stColor + ';font-weight:600;white-space:nowrap;font-size:12px;min-width:90px">' + esc(r.status) + '</td>';
 
       r.cwContents.forEach(item => { html += _aedDOHCell(item); });
       r.bcContents.forEach(item => { html += _aedDOHCell(item); });
@@ -1559,7 +1559,7 @@ function renderDashboardAEDLabel(done){
 
         card.innerHTML =
           '<div style="flex:1">' + leftHtml + '</div>' +
-          '<div style="min-width:44px;max-width:54px;background:#7c3aed;color:#fff;' +
+          '<div style="min-width:44px;max-width:54px;background:#16a34a;color:#fff;' +
                'border-radius:2px;padding:3px;font-size:8px">' + rightHtml + '</div>';
 
       } else {
