@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.18</title>
+  <title>Citywide Inventory — Web App v2.19</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -81,11 +81,14 @@
     .cabinet-section-header{background:#e8f0fe;padding:8px 12px;font-weight:700;color:#1e40af;border-radius:6px;margin-top:12px;margin-bottom:4px}
     /* ── Print styles for AED labels ── */
     @media print{
-      .topbar,.wrap>*:not(#dashboardCard),#dashboardCard>*:not(.tableWrap){ display:none!important }
-      #dashTableWrap{ border:none!important;padding:0!important;overflow:visible!important }
-      #aedLabelGrid{ gap:4px!important }
+      *{ visibility:hidden!important }
+      #aedLabelGrid,#aedLabelGrid *{ visibility:visible!important }
+      #aedLabelGrid{
+        position:fixed!important;top:0!important;left:0!important;
+        width:100%!important;display:flex!important;flex-wrap:wrap!important;
+        gap:4px!important;padding:8px!important;background:#fff!important
+      }
       #aedLabelGrid>div{ width:190px!important;border:1px solid #000!important }
-      .btn{ display:none!important }
     }
   </style>
 </head>
@@ -94,7 +97,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.18</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.19</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -1228,7 +1231,7 @@ function renderDashboardBags(done){
   done = done || function(){};
   const selBag=$('dashboardBagSelect').value;
   const body=$('dashboardBody'), head=$('dashboardHead').querySelector('tr');
-  head.innerHTML='<th>Required Item</th><th>Required Qty</th><th>Provided Qty</th><th>Items (exp / lot / qty)</th>';
+  head.innerHTML='<th>Required Item</th><th>Required Qty</th><th>Provided Qty</th><th>Items (exp / lot)</th>';
   if(!selBag){
     body.innerHTML='<tr><td colspan="4" class="small">Select a bag</td></tr>';
     done(); return;
@@ -1336,7 +1339,7 @@ function renderDashboardAED(done){
   done = done || function(){};
   const selAED = $('dashboardAEDSelect') ? $('dashboardAEDSelect').value : '';
   const body = $('dashboardBody'), head = $('dashboardHead').querySelector('tr');
-  head.innerHTML = '<th>Required Item</th><th>Required Qty</th><th>Provided Qty</th><th>Items (exp / lot / qty)</th>';
+  head.innerHTML = '<th>Required Item</th><th>Required Qty</th><th>Provided Qty</th><th>Items (exp / lot)</th>';
   if(!selAED){
     body.innerHTML = '<tr><td colspan="4" class="small">Select an AED</td></tr>';
     done(); return;
@@ -1559,8 +1562,9 @@ function renderDashboardAEDLabel(done){
 
         card.innerHTML =
           '<div style="flex:1">' + leftHtml + '</div>' +
-          '<div style="min-width:44px;max-width:54px;background:#16a34a;color:#fff;' +
-               'border-radius:2px;padding:3px;font-size:8px">' + rightHtml + '</div>';
+          '<div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);' +
+               'background:#16a34a;color:#fff;font-weight:700;font-size:9px;text-align:center;' +
+               'padding:3px 2px;border-radius:2px;min-width:18px">' + esc(r.status) + '</div>';
 
       } else {
         // Other status (Lost, Damaged, Spare, Unknown)
