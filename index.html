@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.19</title>
+  <title>Citywide Inventory — Web App v2.20</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -97,7 +97,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.19</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.20</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -640,6 +640,25 @@
       <div style="margin-top:14px">
         <button id="fleetSave" class="btn">Save Part</button>
         <button id="fleetClear" class="btn secondary" style="margin-left:8px">Clear</button>
+      </div>
+    </div>
+
+    <!-- ── DYMO PRINT MODAL ── -->
+    <div id="dymoModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center">
+      <div style="background:#fff;border-radius:14px;padding:24px;width:400px;max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,0.25)">
+        <div style="font-weight:800;font-size:17px;margin-bottom:4px">🖨 Print with DYMO</div>
+        <div class="small" style="margin-bottom:12px;color:#64748b">Label: 1933084 LW Durable 2¼"×1¼"</div>
+        <div id="dymoAEDLabel" style="font-weight:600;margin-bottom:12px;color:#1e293b;font-size:13px"></div>
+        <div><label>Printer</label><select id="dymoPrinterSelect" style="margin-top:4px"><option value="">-- loading... --</option></select></div>
+        <div id="dymoStatus" style="margin:10px 0;font-size:13px;min-height:18px;color:#475569"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="dymoConfirmPrint" class="btn">Print Label</button>
+          <button id="dymoRefreshPrinters" class="btn secondary small">↻ Refresh</button>
+          <button id="dymoModalClose" class="btn secondary">Cancel</button>
+        </div>
+        <div class="small" style="margin-top:12px;padding:8px;background:#fef9ec;border:1px solid #fcd34d;border-radius:6px;color:#92400e">
+          ⚠ First time: open <a href="https://localhost:41952" target="_blank" style="color:#b45309">https://localhost:41952</a> and accept the security certificate, then click ↻ Refresh.
+        </div>
       </div>
     </div>
 
@@ -1467,10 +1486,101 @@ function renderDashboardAEDDOH(done){
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// DYMO PRINTER INTEGRATION (DYMO Connect REST API — no SDK required)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const _DYMO_URLS_ = ['https://localhost:41952', 'http://localhost:41951'];
+let _dymoCurrentAED_ = null;
+
+async function _dymoFetch_(path, opts){
+  for(const base of _DYMO_URLS_){
+    try{
+      const r = await fetch(base + path, Object.assign({ mode:'cors' }, opts||{}));
+      if(r.ok) return await r.text();
+    }catch(e){ continue; }
+  }
+  throw new Error('DYMO Connect unreachable. Open https://localhost:41952 in your browser and accept the certificate, then click ↻ Refresh.');
+}
+
+async function _getDYMOPrinters_(){
+  const xml = await _dymoFetch_('/DYMO/DLS/Printing/GetPrinters');
+  const doc = new DOMParser().parseFromString(xml, 'text/xml');
+  return Array.from(doc.querySelectorAll('LabelWriterPrinter Name')).map(n => n.textContent).filter(Boolean);
+}
+
+function openDYMOModal(aedData){
+  _dymoCurrentAED_ = aedData;
+  const modal = $('dymoModal'); modal.style.display = 'flex';
+  $('dymoAEDLabel').textContent = aedData.aedNumber + ' — SN: ' + aedData.serialNumber;
+  $('dymoStatus').textContent = 'Connecting to DYMO Connect...';
+  $('dymoPrinterSelect').innerHTML = '';
+  _getDYMOPrinters_().then(printers => {
+    if(!printers.length){ $('dymoStatus').textContent = 'No LabelWriter printers found. Check DYMO Connect is running.'; return; }
+    printers.forEach(p => { const o = document.createElement('option'); o.value=p; o.textContent=p; $('dymoPrinterSelect').appendChild(o); });
+    $('dymoStatus').textContent = printers.length + ' printer(s) ready.';
+  }).catch(err => { $('dymoStatus').textContent = '⚠ ' + err.message; });
+}
+
+function _generateAEDLabelText_(aedData){
+  const content = (aedData.cwContents && aedData.cwContents.some(x => x.value !== '-')) ? aedData.cwContents : (aedData.bcContents || []);
+  const lines = [];
+  content.forEach(item => {
+    if(item.value === '-') return;
+    const short = _aedLabelShortName(item.name);
+    if(item.expires){ lines.push(short + ':' + _aedFmtDate(item.exp || item.value)); }
+    else { lines.push(short + ':' + (item.value === '-' ? '0' : item.value)); }
+  });
+  lines.push(aedData.aedNumber || '');
+  if(aedData.serialNumber) lines.push(aedData.serialNumber);
+  return lines.join('\n');
+}
+
+function _generateAEDLabelXML_(text){
+  const safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return '<?xml version="1.0" encoding="utf-8"?>' +
+    '<DieCutLabel Version="8.0" Units="twips">' +
+    '<PaperOrientation>Portrait</PaperOrientation><Id>Address</Id>' +
+    '<PaperName>1933084 LW Durable 2-1/4 x 1-1/4</PaperName>' +
+    '<DrawCommands><RoundRectangle X="0" Y="0" Width="1800" Height="3240" Rx="270" Ry="270"/></DrawCommands>' +
+    '<ObjectInfo><TextObject>' +
+    '<Name>TEXT</Name>' +
+    '<ForeColor Alpha="255" Red="0" Green="0" Blue="0"/>' +
+    '<BackColor Alpha="0" Red="255" Green="255" Blue="255"/>' +
+    '<LinkedObjectName/><Rotation>Rotation0</Rotation>' +
+    '<IsMirrored>False</IsMirrored><IsVariable>False</IsVariable>' +
+    '<HorizontalAlignment>Left</HorizontalAlignment><VerticalAlignment>Top</VerticalAlignment>' +
+    '<TextFitMode>ShrinkToFit</TextFitMode><UseFullFontHeight>True</UseFullFontHeight>' +
+    '<Verticalized>False</Verticalized>' +
+    '<StyledText><Element><String>' + safe + '</String>' +
+    '<Attributes><Font Family="Arial" Size="7" Bold="True" Italic="False" Underline="False" StrikeOut="False"/>' +
+    '<ForeColor Alpha="255" Red="0" Green="0" Blue="0"/></Attributes>' +
+    '</Element></StyledText></TextObject>' +
+    '<Bounds X="57" Y="57" Width="1686" Height="3126"/></ObjectInfo></DieCutLabel>';
+}
+
+function dymoPrintConfirm(){
+  if(!_dymoCurrentAED_){ alert('No AED selected'); return; }
+  const printer = $('dymoPrinterSelect').value;
+  if(!printer){ alert('Select a printer first'); return; }
+  $('dymoStatus').textContent = 'Sending to printer...';
+  const text = _generateAEDLabelText_(_dymoCurrentAED_);
+  const xml  = _generateAEDLabelXML_(text);
+  const body = 'printerName=' + encodeURIComponent(printer) +
+    '&printParamsXml=&labelXml=' + encodeURIComponent(xml) + '&labelSetXml=';
+  _dymoFetch_('/DYMO/DLS/Printing/PrintLabel', {
+    method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:body
+  }).then(() => {
+    $('dymoStatus').textContent = '✅ Label sent to ' + printer;
+    setTimeout(() => { $('dymoModal').style.display = 'none'; }, 1800);
+  }).catch(err => { $('dymoStatus').textContent = '❌ ' + err.message; });
+}
+
+// ─── AED Label Printout ───────────────────────────────────────────────────────
 function renderDashboardAEDLabel(done){
   done = done || function(){};
   const body = $('dashboardBody'), head = $('dashboardHead').querySelector('tr');
-  head.innerHTML = '<th style="background:#fff;border:none"></th>';
+  head.innerHTML = '';
   body.innerHTML = '';
   showDashSpinner_(2, 'Building AED labels…');
   done();
@@ -1486,106 +1596,132 @@ function renderDashboardAEDLabel(done){
     const td = document.createElement('td');
     td.style.cssText = 'padding:8px;vertical-align:top';
 
-    // Print button
+    // Controls row: AED selector + print buttons
+    const controls = document.createElement('div');
+    controls.style.cssText = 'display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap';
+
+    // AED filter selector
+    const filterWrap = document.createElement('div');
+    filterWrap.style.cssText = 'display:flex;gap:6px;align-items:center';
+    const filterLabel = document.createElement('label');
+    filterLabel.textContent = 'Select AED:';
+    filterLabel.style.fontWeight = '600';
+    const aedSel = document.createElement('select');
+    aedSel.id = 'aedLabelFilterSelect';
+    aedSel.innerHTML = '<option value="">-- All AEDs --</option>';
+    results.forEach(r => {
+      const o = document.createElement('option');
+      o.value = r.barcode || r.aedNumber;
+      o.textContent = r.aedNumber + (r.serialNumber ? ' — SN: ' + r.serialNumber : '');
+      aedSel.appendChild(o);
+    });
+    filterWrap.appendChild(filterLabel);
+    filterWrap.appendChild(aedSel);
+    controls.appendChild(filterWrap);
+
+    // Browser print button
     const printBtn = document.createElement('button');
     printBtn.className = 'btn secondary small';
-    printBtn.style.marginBottom = '12px';
     printBtn.textContent = '🖨 Print Labels';
     printBtn.onclick = function(){ window.print(); };
-    td.appendChild(printBtn);
+    controls.appendChild(printBtn);
 
+    td.appendChild(controls);
+
+    // Label grid
     const grid = document.createElement('div');
     grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px';
     grid.id = 'aedLabelGrid';
 
-    results.forEach(r => {
-      const stLow = (r.status||'').toLowerCase();
-      const isLeb = stLow === 'leb' || stLow.includes('@leb') || stLow.includes('leb');
-      const isInService = r.isInService;
-
-      const card = document.createElement('div');
-      card.style.cssText =
-        'width:200px;border:1px solid #000;border-radius:3px;padding:6px 5px;' +
-        'font-family:Arial,sans-serif;font-size:10px;line-height:1.35;background:#fff;' +
-        'page-break-inside:avoid;display:flex;gap:4px';
-
-      if(isLeb){
-        // Simplified label — image 2 style
-        card.innerHTML =
-          '<div style="flex:1;text-align:center">' +
-            '<div style="font-weight:800;font-size:11px;border-bottom:1px solid #000;' +
-                 'margin-bottom:6px;padding-bottom:3px">RAPID EMS</div>' +
-            '<div style="margin-top:8px;font-weight:700;font-size:13px">' + esc(r.aedNumber) + '</div>' +
-            '<div style="margin-top:2px">SN:</div>' +
-            '<div style="font-weight:700">' + esc(r.serialNumber) + '</div>' +
-          '</div>' +
-          '<div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);' +
-               'background:#7c3aed;color:#fff;font-weight:700;font-size:10px;text-align:center;' +
-               'padding:3px 2px;border-radius:2px;min-width:18px">' + esc(r.status) + '</div>';
-
-      } else if(isInService){
-        // Full label — image 1 style
-        // Use CW contents (primary); if empty use BC
-        const content = (r.cwContents && r.cwContents.some(x => x.value !== '-'))
-          ? r.cwContents : r.bcContents;
-
-        // Find expiring/expired items (≤30 days or already expired)
-        const expiringSoon = content.filter(x => x.expires && x.days !== null && x.days >= 0 && x.days <= 30);
-        const expired      = content.filter(x => x.expires && x.days !== null && x.days < 0);
-
-        // Left side — content list
-        let leftHtml = '';
-        content.forEach(item => {
-          if(!item.expires){
-            // Non-expiring: show qty (treat '-' as '0' when no data)
-            leftHtml += '<div>' + esc(_aedLabelShortName(item.name)) + ':' + esc(item.value === '-' ? '0' : item.value) + '</div>';
-          } else {
-            const d = item.days;
-            let color = '';
-            if(d !== null){ if(d < 0) color = '#dc2626'; else if(d <= 30) color = '#b45309'; }
-            const displayDate = _aedFmtDate(item.exp || item.value);
-            leftHtml += '<div style="color:' + (color||'inherit') + '">' +
-              esc(_aedLabelShortName(item.name)) + ':' + esc(displayDate) + '</div>';
-          }
-        });
-        // Footer
-        leftHtml +=
-          '<div style="border-top:1px solid #000;margin-top:3px;padding-top:2px;font-weight:700">' + esc(r.aedNumber) + '</div>' +
-          '<div>' + esc(r.serialNumber) + '</div>' +
-          '<div>======</div>' +
-          (r.assignedLocation ? '<div>' + esc(r.assignedLocation) + '</div>' : '');
-
-        // Right side — status + expiry warnings
-        const stBg = '#16a34a';
-        // Right panel: status only — expiry already shown via color in left panel
-        const rightHtml = '<div style="font-weight:700;font-size:9px;text-align:center">' + esc(r.status) + '</div>';
-
-        card.innerHTML =
-          '<div style="flex:1">' + leftHtml + '</div>' +
-          '<div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);' +
-               'background:#16a34a;color:#fff;font-weight:700;font-size:9px;text-align:center;' +
-               'padding:3px 2px;border-radius:2px;min-width:18px">' + esc(r.status) + '</div>';
-
-      } else {
-        // Other status (Lost, Damaged, Spare, Unknown)
-        card.innerHTML =
-          '<div style="flex:1;text-align:center">' +
-            '<div style="font-weight:700;font-size:12px;margin-bottom:4px">' + esc(r.aedNumber) + '</div>' +
-            '<div style="font-size:10px;color:#64748b">SN: ' + esc(r.serialNumber) + '</div>' +
-            '<div style="margin-top:6px;font-weight:600;font-size:10px;color:#dc2626">' + esc(r.status) + '</div>' +
-          '</div>' +
-          '<div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);' +
-               'background:#dc2626;color:#fff;font-weight:700;font-size:9px;text-align:center;' +
-               'padding:3px 2px;border-radius:2px;min-width:18px">' + esc(r.status) + '</div>';
-      }
-
-      grid.appendChild(card);
-    });
+    function buildGrid(filterKey){
+      grid.innerHTML = '';
+      const toRender = filterKey ? results.filter(r => (r.barcode||r.aedNumber) === filterKey) : results;
+      toRender.forEach(r => {
+        const card = _buildAEDLabelCard_(r);
+        grid.appendChild(card);
+      });
+    }
+    aedSel.addEventListener('change', function(){ buildGrid(this.value); });
+    buildGrid('');
 
     td.appendChild(grid);
     tr.appendChild(td);
     body.appendChild(tr);
   });
+}
+
+function _buildAEDLabelCard_(r){
+  const stLow = (r.status||'').toLowerCase();
+  const isLeb = stLow === 'leb' || stLow.includes('@leb') || stLow.includes('leb');
+  const isInService = r.isInService;
+
+  const outer = document.createElement('div');
+  outer.style.cssText = 'display:flex;flex-direction:column;gap:4px';
+
+  const card = document.createElement('div');
+  card.style.cssText =
+    'width:200px;border:1px solid #000;border-radius:3px;padding:6px 5px;' +
+    'font-family:Arial,sans-serif;font-size:10px;line-height:1.35;background:#fff;' +
+    'page-break-inside:avoid;display:flex;gap:4px';
+
+  if(isLeb){
+    card.innerHTML =
+      '<div style="flex:1;text-align:center">' +
+        '<div style="font-weight:800;font-size:11px;border-bottom:1px solid #000;margin-bottom:6px;padding-bottom:3px">RAPID EMS</div>' +
+        '<div style="margin-top:8px;font-weight:700;font-size:13px">' + esc(r.aedNumber) + '</div>' +
+        '<div style="margin-top:2px">SN:</div><div style="font-weight:700">' + esc(r.serialNumber) + '</div>' +
+      '</div>' +
+      '<div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);' +
+           'background:#7c3aed;color:#fff;font-weight:700;font-size:10px;text-align:center;' +
+           'padding:3px 2px;border-radius:2px;min-width:18px">' + esc(r.status) + '</div>';
+
+  } else if(isInService){
+    const content = (r.cwContents && r.cwContents.some(x => x.value !== '-')) ? r.cwContents : r.bcContents;
+    let leftHtml = '';
+    (content||[]).forEach(item => {
+      if(!item.expires){
+        leftHtml += '<div>' + esc(_aedLabelShortName(item.name)) + ':' + esc(item.value === '-' ? '0' : item.value) + '</div>';
+      } else {
+        const d = item.days;
+        let color = '';
+        if(d !== null){ if(d < 0) color='#dc2626'; else if(d <= 30) color='#b45309'; }
+        leftHtml += '<div style="color:' + (color||'inherit') + '">' + esc(_aedLabelShortName(item.name)) + ':' + esc(_aedFmtDate(item.exp||item.value)) + '</div>';
+      }
+    });
+    leftHtml +=
+      '<div style="border-top:1px solid #000;margin-top:3px;padding-top:2px;font-weight:700">' + esc(r.aedNumber) + '</div>' +
+      '<div>' + esc(r.serialNumber) + '</div><div>======</div>' +
+      (r.assignedLocation ? '<div>' + esc(r.assignedLocation) + '</div>' : '');
+    card.innerHTML =
+      '<div style="flex:1">' + leftHtml + '</div>' +
+      '<div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);' +
+           'background:#16a34a;color:#fff;font-weight:700;font-size:9px;text-align:center;' +
+           'padding:3px 2px;border-radius:2px;min-width:18px">' + esc(r.status) + '</div>';
+
+    // DYMO button per In Service card
+    const dymoBtn = document.createElement('button');
+    dymoBtn.className = 'btn small';
+    dymoBtn.style.cssText = 'font-size:9px;padding:3px 6px;background:#e65100;color:#fff;width:100%;border-radius:4px;cursor:pointer';
+    dymoBtn.textContent = '🖨 Print with DYMO';
+    dymoBtn.addEventListener('click', function(){ openDYMOModal(r); });
+    outer.appendChild(card);
+    outer.appendChild(dymoBtn);
+    return outer;
+
+  } else {
+    card.innerHTML =
+      '<div style="flex:1;text-align:center">' +
+        '<div style="font-weight:700;font-size:12px;margin-bottom:4px">' + esc(r.aedNumber) + '</div>' +
+        '<div style="font-size:10px;color:#64748b">SN: ' + esc(r.serialNumber) + '</div>' +
+        '<div style="margin-top:6px;font-weight:600;font-size:10px;color:#dc2626">' + esc(r.status) + '</div>' +
+      '</div>' +
+      '<div style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);' +
+           'background:#dc2626;color:#fff;font-weight:700;font-size:9px;text-align:center;' +
+           'padding:3px 2px;border-radius:2px;min-width:18px">' + esc(r.status) + '</div>';
+  }
+
+  outer.appendChild(card);
+  return outer;
 }
 
 /** Shorten AED item names for compact label display. */
@@ -2827,6 +2963,11 @@ window.onload = function(){
   });
   $('transferRefreshLog').addEventListener('click', loadTransferLog);
 
+  // DYMO modal listeners
+  $('dymoConfirmPrint').addEventListener('click', dymoPrintConfirm);
+  $('dymoModalClose').addEventListener('click', function(){ $('dymoModal').style.display='none'; });
+  $('dymoRefreshPrinters').addEventListener('click', function(){ if(_dymoCurrentAED_) openDYMOModal(_dymoCurrentAED_); else $('dymoStatus').textContent='No AED selected'; });
+
   // Fleet Inventory listeners
   $('btnFleet').addEventListener('click', ()=>showCard('fleetCard'));
   $('fleetSave').addEventListener('click', saveFleetItemClient);
@@ -2874,4 +3015,4 @@ window.onload = function(){
 };
 </script>
 </body>
-</html>
+  </html>
