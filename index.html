@@ -1515,39 +1515,94 @@ function openDYMOModal(aedData){
 function dymoPrintConfirm(){
   if(!_dymoCurrentAED_) return;
   $('dymoModal').style.display = 'none';
-  _printAEDPopup_(_dymoCurrentAED_);
+  _printAEDTab_(_dymoCurrentAED_);
 }
 
 /**
- * Opens a print popup sized exactly for DYMO 1933084 LW Durable 2¼"×1¼" label.
- * @page CSS sets the paper size so the system print dialog will use it automatically
- * when the DYMO LabelWriter driver is installed.
- * Select: DYMO LabelWriter 5XL → Paper: LW Durable 2¼"×1¼" → Print.
+ * Opens a full new browser tab with:
+ *  - A to-scale on-screen label preview (1.25" × 2.25" = 120 × 216 px at 96 DPI)
+ *  - Step-by-step printing instructions
+ *  - A prominent Print button
+ * In @media print: hides everything except the label, using @page to set
+ * size: 1.25in 2.25in so the DYMO driver maps it to the loaded roll automatically.
+ * No DYMO software or SDK required.
  */
-function _printAEDPopup_(aedData){
-  const content = (aedData.cwContents && aedData.cwContents.some(x=>x.value!=='-')) ? aedData.cwContents : (aedData.bcContents||[]);
-  const divs = [];
+function _printAEDTab_(aedData){
+  const content = (aedData.cwContents && aedData.cwContents.some(x=>x.value!=='-'))
+    ? aedData.cwContents : (aedData.bcContents||[]);
+
+  let labelRows = '';
   content.forEach(item => {
     if(item.value==='-') return;
     const short = _aedLabelShortName(item.name);
-    if(item.expires){ divs.push('<div>'+esc(short)+':'+esc(_aedFmtDate(item.exp||item.value))+'</div>'); }
-    else { divs.push('<div>'+esc(short)+':'+(item.value==='-'?'0':esc(item.value))+'</div>'); }
+    const val   = item.expires ? _aedFmtDate(item.exp||item.value) : (item.value==='-'?'0':item.value);
+    labelRows += '<div class="lr">' + esc(short) + ':' + esc(val) + '</div>';
   });
-  divs.push('<div style="border-top:1px solid;margin-top:2px;padding-top:2px;font-weight:800">'+esc(aedData.aedNumber||'')+'</div>');
-  if(aedData.serialNumber) divs.push('<div>'+esc(aedData.serialNumber)+'</div>');
+  labelRows += '<div class="lr" style="border-top:1px solid #000;margin-top:2px;padding-top:2px;font-size:8pt">'
+             + esc(aedData.aedNumber||'') + '</div>';
+  if(aedData.serialNumber) labelRows += '<div class="lr">' + esc(aedData.serialNumber) + '</div>';
 
-  const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
-    '@page{size:1.25in 2.25in;margin:3mm}' +
-    '*{margin:0;padding:0;box-sizing:border-box}' +
-    'body{font-family:Arial,sans-serif;font-size:7pt;line-height:1.28;font-weight:bold}' +
-    'div{white-space:nowrap;overflow:hidden}' +
-    '</style></head><body>' + divs.join('') +
-    '<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},250);}<\/scr'+'ipt>' +
-    '</body></html>';
+  const printerName = 'DYMO Label Writer 5XL on DYMOLW5XL3020b0E.local';
 
-  const win = window.open('','_blank','width=140,height=250,scrollbars=no,toolbar=no,menubar=no,location=no,status=no');
-  if(win){ win.document.write(html); win.document.close(); }
-  else { alert('Popup blocked.\nPlease allow popups for this site, then click \"🖨 Print with DYMO\" again.'); }
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8">
+<title>AED Label — ${esc(aedData.aedNumber||'')}</title>
+<style>
+/* ── Screen styles ─────────────────────────────────────── */
+body{margin:0;padding:24px;background:#f1f5f9;font-family:Arial,sans-serif}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;max-width:540px;margin:0 auto 20px}
+h2{margin:0 0 14px;font-size:17px;color:#1e293b}
+.print-btn{background:#0b5fff;color:#fff;border:none;padding:11px 28px;border-radius:8px;
+  font-size:15px;font-weight:700;cursor:pointer;margin-bottom:16px;display:block;width:100%}
+.print-btn:hover{background:#0040cc}
+ol{margin:0;padding-left:20px;font-size:13px;line-height:2;color:#1e293b}
+ol li strong{color:#0b5fff}
+.note{font-size:12px;color:#64748b;margin-top:10px;padding:8px;background:#f8fafc;border-radius:6px}
+.preview-wrap{display:flex;flex-direction:column;align-items:center;margin-top:8px}
+.preview-label{font-size:11px;color:#64748b;margin-bottom:6px}
+/* Label container: 1.25"×2.25" at 96 DPI = 120×216px */
+.label{width:120px;height:216px;border:1.5px solid #000;border-radius:4px;padding:4px 5px;
+  font-family:Arial,sans-serif;font-size:7pt;font-weight:700;line-height:1.28;
+  overflow:hidden;background:#fff;box-shadow:2px 3px 8px rgba(0,0,0,.15)}
+.lr{white-space:nowrap;overflow:hidden;text-overflow:clip}
+/* ── Print styles — ONLY the label content is visible ─── */
+@media print{
+  *{visibility:hidden!important}
+  .label,.label *{visibility:visible!important}
+  .label{
+    position:fixed!important;top:0!important;left:0!important;
+    width:calc(1.25in - 4mm)!important;height:calc(2.25in - 4mm)!important;
+    border:none!important;border-radius:0!important;box-shadow:none!important;
+    padding:2mm!important;font-size:7pt!important;line-height:1.28!important
+  }
+  @page{size:1.25in 2.25in;margin:0}
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>🖨 AED Label — ${esc(aedData.aedNumber||'')}${aedData.serialNumber?' (SN: '+esc(aedData.serialNumber)+')':''}</h2>
+  <button class="print-btn" onclick="window.print()">Print Label on DYMO</button>
+  <ol>
+    <li>Click <strong>Print Label on DYMO</strong> above</li>
+    <li>Printer: <strong>${esc(printerName)}</strong></li>
+    <li>Paper/Label: <strong>should auto-detect "LW Durable 2¼"×1¼""</strong> from the loaded roll</li>
+    <li>Margins: <strong>None</strong></li>
+    <li>Scale: <strong>100%</strong> — do NOT "Fit to page"</li>
+    <li>Click Print</li>
+  </ol>
+  <div class="note">The label content below is shown at actual size (1¼" wide × 2¼" tall). When printed, everything outside this box is hidden.</div>
+</div>
+<div class="preview-wrap">
+  <div class="preview-label">Label preview at actual size:</div>
+  <div class="label" id="labelContent">${labelRows}</div>
+</div>
+</body></html>`;
+
+  const tab = window.open('', '_blank');
+  if(tab){ tab.document.write(html); tab.document.close(); }
+  else { alert('Tab was blocked.\nAllow pop-ups for this site, then try again.'); }
 }
 
 // ─── AED Label Printout ───────────────────────────────────────────────────────
@@ -1677,7 +1732,7 @@ function _buildAEDLabelCard_(r){
     dymoBtn.className = 'btn small';
     dymoBtn.style.cssText = 'font-size:9px;padding:3px 6px;background:#e65100;color:#fff;width:100%;border-radius:4px;cursor:pointer';
     dymoBtn.textContent = '🖨 Print with DYMO';
-    dymoBtn.addEventListener('click', function(){ openDYMOModal(r); });
+    dymoBtn.addEventListener('click', function(){ _printAEDTab_(r); });
     outer.appendChild(card);
     outer.appendChild(dymoBtn);
     return outer;
