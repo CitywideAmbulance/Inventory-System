@@ -1538,9 +1538,8 @@ function _printAEDTab_(aedData){
   let labelRows = '';
   content.forEach(item => {
     if(item.value==='-') return;
-    const short = _aedLabelShortName(item.name);
-    const val   = item.expires ? _aedFmtDate(item.exp||item.value) : (item.value==='-'?'0':item.value);
-    labelRows += '<div class="lr">' + esc(short) + ':' + esc(val) + '</div>';
+    const val = item.expires ? _aedFmtDate(item.exp||item.value) : (item.value==='-'?'0':item.value);
+    labelRows += '<div class="lr">' + esc(item.name) + ':' + esc(val) + '</div>';
   });
   // AED # on its own line, SN below it
   labelRows += '<div class="lr" style="border-top:1px solid #000;margin-top:1px;padding-top:1px">'
@@ -1566,8 +1565,9 @@ ol strong{color:#0b5fff}
 .preview-wrap{display:flex;flex-direction:column;align-items:center}
 /* Screen label preview: 1.25"×2.25" at 96 DPI = 120×216 px */
 .label{width:120px;height:216px;border:1.5px solid #000;border-radius:3px;
-  padding:3px 4px;font-family:Arial,sans-serif;font-size:6.5pt;font-weight:700;
+  padding:3px 4px 3px 19px;font-family:Arial,sans-serif;font-size:6.5pt;font-weight:700;
   line-height:1.2;overflow:hidden;background:#fff;box-shadow:2px 3px 8px rgba(0,0,0,.12)}
+/* 19px left ≈ 5mm — matches the print left padding so preview reflects what prints */
 .lr{white-space:nowrap;overflow:hidden}
 
 /* ── PRINT STYLES ───────────────────────────────────────── */
@@ -1585,7 +1585,7 @@ ol strong{color:#0b5fff}
     width:1.21in!important;   /* 1.25in - 2×0.5mm side padding */
     height:2.21in!important;  /* 2.25in - 2×0.5mm top/bottom padding */
     border:none!important;border-radius:0!important;box-shadow:none!important;
-    padding:0.5mm!important;
+    padding:1mm 2mm 1mm 5mm!important; /* 5mm left clears DYMO's physical edge cut */
     font-size:6.5pt!important;line-height:1.2!important;
     overflow:hidden!important;background:white!important;
     box-sizing:border-box!important
