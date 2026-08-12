@@ -1519,13 +1519,17 @@ function dymoPrintConfirm(){
 }
 
 /**
- * Opens a full new browser tab with:
- *  - A to-scale on-screen label preview (1.25" × 2.25" = 120 × 216 px at 96 DPI)
- *  - Step-by-step printing instructions
- *  - A prominent Print button
- * In @media print: hides everything except the label, using @page to set
- * size: 1.25in 2.25in so the DYMO driver maps it to the loaded roll automatically.
- * No DYMO software or SDK required.
+ * Opens a new browser tab with the AED label sized for DYMO 1933084 / 30334
+ * LW Durable 2¼"×1¼" (1.25" wide × 2.25" tall in portrait).
+ *
+ * Print fixes applied:
+ *  - display:none (not visibility:hidden) so Chrome correctly isolates content
+ *  - @page margin:0 → Chrome print dialog sets Margins to "None" automatically
+ *  - overflow:hidden on html/body prevents multi-label bleed
+ *  - Font 6.5pt / line-height 1.2 guarantees all ~18 lines fit in 2.25"
+ *  - position:absolute (not fixed) on the label for reliable rendering
+ *
+ * User only needs to: select DYMO printer → verify Margins=None → Print.
  */
 function _printAEDTab_(aedData){
   const content = (aedData.cwContents && aedData.cwContents.some(x=>x.value!=='-'))
@@ -1538,71 +1542,85 @@ function _printAEDTab_(aedData){
     const val   = item.expires ? _aedFmtDate(item.exp||item.value) : (item.value==='-'?'0':item.value);
     labelRows += '<div class="lr">' + esc(short) + ':' + esc(val) + '</div>';
   });
-  labelRows += '<div class="lr" style="border-top:1px solid #000;margin-top:2px;padding-top:2px;font-size:8pt">'
+  // AED # on its own line, SN below it
+  labelRows += '<div class="lr" style="border-top:1px solid #000;margin-top:1px;padding-top:1px">'
              + esc(aedData.aedNumber||'') + '</div>';
   if(aedData.serialNumber) labelRows += '<div class="lr">' + esc(aedData.serialNumber) + '</div>';
-
-  const printerName = 'DYMO Label Writer 5XL on DYMOLW5XL3020b0E.local';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8">
 <title>AED Label — ${esc(aedData.aedNumber||'')}</title>
 <style>
-/* ── Screen styles ─────────────────────────────────────── */
-body{margin:0;padding:24px;background:#f1f5f9;font-family:Arial,sans-serif}
-.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;max-width:540px;margin:0 auto 20px}
-h2{margin:0 0 14px;font-size:17px;color:#1e293b}
-.print-btn{background:#0b5fff;color:#fff;border:none;padding:11px 28px;border-radius:8px;
-  font-size:15px;font-weight:700;cursor:pointer;margin-bottom:16px;display:block;width:100%}
-.print-btn:hover{background:#0040cc}
-ol{margin:0;padding-left:20px;font-size:13px;line-height:2;color:#1e293b}
-ol li strong{color:#0b5fff}
-.note{font-size:12px;color:#64748b;margin-top:10px;padding:8px;background:#f8fafc;border-radius:6px}
-.preview-wrap{display:flex;flex-direction:column;align-items:center;margin-top:8px}
-.preview-label{font-size:11px;color:#64748b;margin-bottom:6px}
-/* Label container: 1.25"×2.25" at 96 DPI = 120×216px */
-.label{width:120px;height:216px;border:1.5px solid #000;border-radius:4px;padding:4px 5px;
-  font-family:Arial,sans-serif;font-size:7pt;font-weight:700;line-height:1.28;
-  overflow:hidden;background:#fff;box-shadow:2px 3px 8px rgba(0,0,0,.15)}
-.lr{white-space:nowrap;overflow:hidden;text-overflow:clip}
-/* ── Print styles — ONLY the label content is visible ─── */
+/* ── SCREEN STYLES ──────────────────────────────────────── */
+body{margin:0;padding:20px;background:#f1f5f9;font-family:Arial,sans-serif}
+.instr{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;max-width:520px;margin:0 auto 16px}
+h2{margin:0 0 12px;font-size:16px}
+.pbtn{background:#0b5fff;color:#fff;border:none;padding:10px 24px;border-radius:8px;
+  font-size:15px;font-weight:700;cursor:pointer;display:block;width:100%;margin-bottom:14px}
+.pbtn:hover{background:#0040cc}
+ol{margin:0;padding-left:18px;font-size:13px;line-height:1.9;color:#1e293b}
+ol strong{color:#0b5fff}
+.warn{margin-top:10px;font-size:12px;padding:8px 10px;background:#fef9ec;border:1px solid #fcd34d;border-radius:6px;color:#92400e}
+.pinfo{text-align:center;font-size:11px;color:#64748b;margin-bottom:5px}
+.preview-wrap{display:flex;flex-direction:column;align-items:center}
+/* Screen label preview: 1.25"×2.25" at 96 DPI = 120×216 px */
+.label{width:120px;height:216px;border:1.5px solid #000;border-radius:3px;
+  padding:3px 4px;font-family:Arial,sans-serif;font-size:6.5pt;font-weight:700;
+  line-height:1.2;overflow:hidden;background:#fff;box-shadow:2px 3px 8px rgba(0,0,0,.12)}
+.lr{white-space:nowrap;overflow:hidden}
+
+/* ── PRINT STYLES ───────────────────────────────────────── */
 @media print{
-  *{visibility:hidden!important}
-  .label,.label *{visibility:visible!important}
+  /* Step 1: hide EVERYTHING using display:none so Chrome isolates content */
+  html,body{margin:0!important;padding:0!important;overflow:hidden!important;
+    width:1.25in!important;height:2.25in!important;background:white!important}
+  .instr{display:none!important}
+  .preview-wrap{margin:0!important;padding:0!important;display:block!important}
+  .pinfo{display:none!important}
+  /* Step 2: the label fills the full @page area */
   .label{
-    position:fixed!important;top:0!important;left:0!important;
-    width:calc(1.25in - 4mm)!important;height:calc(2.25in - 4mm)!important;
+    display:block!important;
+    position:absolute!important;top:0!important;left:0!important;
+    width:1.21in!important;   /* 1.25in - 2×0.5mm side padding */
+    height:2.21in!important;  /* 2.25in - 2×0.5mm top/bottom padding */
     border:none!important;border-radius:0!important;box-shadow:none!important;
-    padding:2mm!important;font-size:7pt!important;line-height:1.28!important
+    padding:0.5mm!important;
+    font-size:6.5pt!important;line-height:1.2!important;
+    overflow:hidden!important;background:white!important;
+    box-sizing:border-box!important
   }
-  @page{size:1.25in 2.25in;margin:0}
+  /* Step 3: @page with explicit portrait size and zero margins */
+  @page{
+    size:1.25in 2.25in portrait;
+    margin:0
+  }
 }
 </style>
 </head>
 <body>
-<div class="card">
-  <h2>🖨 AED Label — ${esc(aedData.aedNumber||'')}${aedData.serialNumber?' (SN: '+esc(aedData.serialNumber)+')':''}</h2>
-  <button class="print-btn" onclick="window.print()">Print Label on DYMO</button>
+<div class="instr">
+  <h2>🖨&nbsp; AED Label &mdash; ${esc(aedData.aedNumber||'')}${aedData.serialNumber ? ' &nbsp;<span style="font-weight:400;color:#64748b;font-size:14px">SN: '+esc(aedData.serialNumber)+'</span>' : ''}</h2>
+  <button class="pbtn" onclick="window.print()">Print Label on DYMO</button>
   <ol>
     <li>Click <strong>Print Label on DYMO</strong> above</li>
-    <li>Printer: <strong>${esc(printerName)}</strong></li>
-    <li>Paper/Label: <strong>should auto-detect "LW Durable 2¼"×1¼""</strong> from the loaded roll</li>
-    <li>Margins: <strong>None</strong></li>
-    <li>Scale: <strong>100%</strong> — do NOT "Fit to page"</li>
-    <li>Click Print</li>
+    <li>Destination: select <strong>DYMO Label Writer 5XL on DYMOLW5XL3020b0E.local</strong></li>
+    <li>Paper size: will auto-detect as <strong>30334 2-1/4 in x 1-1/4 in</strong> from the loaded roll</li>
+    <li>Margins: <strong>None</strong> &nbsp;← change this if it says anything else</li>
+    <li>Scale: <strong>Default</strong> or <strong>100%</strong> — do NOT "Fit to page"</li>
+    <li>Click <strong>Print</strong></li>
   </ol>
-  <div class="note">The label content below is shown at actual size (1¼" wide × 2¼" tall). When printed, everything outside this box is hidden.</div>
+  <div class="warn">⚠️&nbsp; If you get multiple labels: make sure Margins is set to <strong>None</strong> in the print dialog.</div>
 </div>
 <div class="preview-wrap">
-  <div class="preview-label">Label preview at actual size:</div>
-  <div class="label" id="labelContent">${labelRows}</div>
+  <div class="pinfo">Label preview at actual size (1¼” × 2¼”):</div>
+  <div class="label">${labelRows}</div>
 </div>
 </body></html>`;
 
   const tab = window.open('', '_blank');
   if(tab){ tab.document.write(html); tab.document.close(); }
-  else { alert('Tab was blocked.\nAllow pop-ups for this site, then try again.'); }
+  else { alert('Tab was blocked.\nAllow pop-ups for this site, then click \u201c\uD83D\uDDB1 Print with DYMO\u201d again.'); }
 }
 
 // ─── AED Label Printout ───────────────────────────────────────────────────────
