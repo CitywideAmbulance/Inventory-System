@@ -1574,7 +1574,7 @@ ol strong{color:#0b5fff}
 @media print{
   /* Step 1: hide EVERYTHING using display:none so Chrome isolates content */
   html,body{margin:0!important;padding:0!important;overflow:hidden!important;
-    width:1.25in!important;height:2.25in!important;background:white!important}
+    width:1.25in!important;height:2.25in!important;background:white!important;font-size:5.5pt!important}
   .instr{display:none!important}
   .preview-wrap{margin:0!important;padding:0!important;display:block!important}
   .pinfo{display:none!important}
@@ -1582,11 +1582,14 @@ ol strong{color:#0b5fff}
   .label{
     display:block!important;
     position:absolute!important;top:0!important;left:0!important;
-    width:1.21in!important;   /* 1.25in - 2×0.5mm side padding */
-    height:2.21in!important;  /* 2.25in - 2×0.5mm top/bottom padding */
+    /* Full label width — box-sizing:border-box means padding is included.
+       Printable content = 1.25in - 5mm left - 2mm right = 24.75mm = 70.2pt.
+       At 5.5pt bold Arial ~0.58 char/pt ratio: 22 chars × 0.58 × 5.5pt = 70pt — fits. */
+    width:1.25in!important;
+    height:2.25in!important;
     border:none!important;border-radius:0!important;box-shadow:none!important;
-    padding:1mm 0.5mm 1mm 3mm!important; /* 3mm left clears the DYMO printable edge while preserving usable width */
-    font-size:6.5pt!important;line-height:1.2!important;
+    padding:1mm 2mm 1mm 5mm!important;
+    font-size:5.5pt!important;line-height:1.18!important;
     overflow:hidden!important;background:white!important;
     box-sizing:border-box!important
   }
@@ -1613,7 +1616,7 @@ ol strong{color:#0b5fff}
   <div class="warn">⚠️&nbsp; If you get multiple labels: make sure Margins is set to <strong>None</strong> in the print dialog.</div>
 </div>
 <div class="preview-wrap">
-  <div class="pinfo">Label preview at actual size (2¼” × 1¼”):</div>
+  <div class="pinfo">Label preview at actual size (1¼” × 2¼”):</div>
   <div class="label">${labelRows}</div>
 </div>
 </body></html>`;
