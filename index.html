@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.20</title>
+  <title>Citywide Inventory — Web App v2.21</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -97,7 +97,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.20</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.21</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -819,6 +819,7 @@ function showCard(id){
     if($('narcMode') && !$('narcMode').value) $('narcMode').value = 'create';
     toggleNarcMode();
     loadNarcLookups();
+    if($('narcMode') && $('narcMode').value === 'kit') initNarcKitRows();
     if($('narcMode') && $('narcMode').value === 'verify') loadNarcVerifyRows();
   }
   if(id === 'cabinetCard'){
@@ -1942,7 +1943,12 @@ function toggleNarcMode(){
   const mode=$('narcMode')?$('narcMode').value:'create';
   const createPanel=$('createNarcPanel'), kitPanel=$('narcKitPanel'), verifyPanel=$('narcVerifyPanel');
   if(createPanel) createPanel.style.display=mode==='create'?'block':'none';
-  if(kitPanel) kitPanel.style.display=mode==='kit'?'block':'none';
+  if(kitPanel){
+    const wasHidden = kitPanel.style.display === 'none';
+    kitPanel.style.display = mode==='kit'?'block':'none';
+    // Init rows the first time the kit panel becomes visible (avoids empty tbody)
+    if(mode==='kit' && wasHidden) initNarcKitRows();
+  }
   if(verifyPanel) verifyPanel.style.display=mode==='verify'?'block':'none';
 }
 
@@ -2965,7 +2971,11 @@ window.onload = function(){
   $('equipmentCurrentStatus').addEventListener('change', updateEquipmentStatusUI);
   $('equipmentType').addEventListener('change', updateEquipmentTypeUI);
 
-  $('narcMode').addEventListener('change', function(){ toggleNarcMode(); if(this.value==='verify') loadNarcVerifyRows(); });
+  $('narcMode').addEventListener('change', function(){
+    toggleNarcMode();
+    if(this.value === 'kit') initNarcKitRows();
+    if(this.value === 'verify') loadNarcVerifyRows();
+  });
   $('narcLocation').addEventListener('change', loadNarcLookups);
   $('saveNarcBtn').addEventListener('click', saveNarcClient);
   $('clearNarcBtn').addEventListener('click', clearNarcForm);
