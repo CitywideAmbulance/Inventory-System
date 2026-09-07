@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.21</title>
+  <title>Citywide Inventory — Web App v2.22</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -97,7 +97,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.21</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.22</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -1299,7 +1299,7 @@ function renderDashboardFleet(done){
   const body = $('dashboardBody'), head = $('dashboardHead').querySelector('tr');
   head.innerHTML =
     '<th>Brand</th><th>Part Name</th><th>Part Number</th><th>OEM Part Number</th>' +
-    '<th>Category</th><th>Compatible With</th><th>Description</th>';
+    '<th>Category</th><th>Compatible With</th><th>Description</th><th style="text-align:center">Qty</th>';
   showDashSpinner_(7, 'Loading fleet parts…');
   done(); // show spinner immediately
   jsonpCall('getFleetDashboardData', null, function(rows){
@@ -1321,7 +1321,8 @@ function renderDashboardFleet(done){
         '<td>' + esc(r.oemPartNumber||'—') + '</td>' +
         '<td>' + esc(r.category||'—') + '</td>' +
         '<td>' + esc(r.compatibleWith||'—') + '</td>' +
-        '<td style="max-width:260px;white-space:normal">' + esc(r.description||'—') + '</td>';
+        '<td style="max-width:260px;white-space:normal">' + esc(r.description||'—') + '</td>' +
+        '<td style="text-align:center">' + (r.quantity !== '' && r.quantity !== undefined ? esc(String(r.quantity)) : '—') + '</td>';
       body.appendChild(tr);
     });
   });
