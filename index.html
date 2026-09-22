@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.25</title>
+  <title>Citywide Inventory — Web App v2.24</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -97,7 +97,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.25</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.24</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -1298,43 +1298,31 @@ function renderDashboardFleet(done){
   done = done || function(){};
   const body = $('dashboardBody'), head = $('dashboardHead').querySelector('tr');
   head.innerHTML =
-    '<th>Timestamp</th><th>Added By</th><th>Barcode</th><th>Brand</th>' +
-    '<th>Part Name</th><th>Part Number</th><th>OEM Part Number</th>' +
-    '<th>Compatible With</th><th style="max-width:180px">Description</th>' +
-    '<th>Category</th><th>Aisle</th><th>Rack</th><th>Row</th>' +
-    '<th style="text-align:center">Qty</th>' +
-    '<th style="text-align:right">Unit Cost</th>' +
-    '<th style="text-align:right">Total</th>';
-  showDashSpinner_(16, 'Loading fleet parts…');
-  done();
+    '<th>Brand</th><th>Part Name</th><th>Part Number</th><th>OEM Part Number</th>' +
+    '<th>Category</th><th>Compatible With</th><th>Description</th><th style="text-align:center">Qty</th>';
+  showDashSpinner_(7, 'Loading fleet parts…');
+  done(); // show spinner immediately
   jsonpCall('getFleetDashboardData', null, function(rows){
     body.innerHTML = '';
     if(!rows || !rows.length){
-      body.innerHTML = '<tr><td colspan="16" class="small">No fleet parts found. Add parts via Fleet Inventory, or run the migration from Script Editor to import PartList data.</td></tr>';
+      body.innerHTML = '<tr><td colspan="7" class="small">No fleet parts found. Add parts via Fleet Inventory.</td></tr>';
       return;
     }
-    rows.forEach(r => {
+    // Sort by brand then part name
+    rows.slice().sort((a,b) =>
+      (a.brand||'').localeCompare(b.brand||'') || (a.partName||'').localeCompare(b.partName||'')
+    ).forEach(r => {
       const tr = document.createElement('tr');
-      const fmtCost  = (r.unitCost  ? '$' + Number(r.unitCost).toFixed(2)  : '—');
-      const fmtTotal = (r.total     ? '$' + Number(r.total).toFixed(2)     : '—');
-      const fmtTs    = r.timestamp  ? r.timestamp.replace('T',' ').substring(0,16) : '—';
       tr.innerHTML =
-        '<td style="font-size:11px;white-space:nowrap">' + esc(fmtTs)                + '</td>' +
-        '<td style="font-size:11px">'                    + esc(r.addedBy||'—')        + '</td>' +
-        '<td style="font-size:11px">'                    + esc(r.barcode||'—')        + '</td>' +
-        '<td>'                                           + esc(r.brand||'—')          + '</td>' +
-        '<td><strong>'                                   + esc(r.partName||'—')       + '</strong></td>' +
-        '<td>'                                           + esc(r.partNumber||'—')     + '</td>' +
-        '<td>'                                           + esc(r.oemPartNumber||'—')  + '</td>' +
-        '<td>'                                           + esc(r.compatibleWith||'—') + '</td>' +
-        '<td style="max-width:180px;white-space:normal;font-size:12px">'+ esc(r.description||'—') + '</td>' +
-        '<td>'                                           + esc(r.category||'—')       + '</td>' +
-        '<td>'                                           + esc(r.locationAisle||'—')  + '</td>' +
-        '<td>'                                           + esc(r.locationRack||'—')   + '</td>' +
-        '<td>'                                           + esc(r.locationRow||'—')    + '</td>' +
-        '<td style="text-align:center">'                 + (r.quantity!==undefined&&r.quantity!==''?esc(String(r.quantity)):'—') + '</td>' +
-        '<td style="text-align:right">'                  + fmtCost                   + '</td>' +
-        '<td style="text-align:right;font-weight:600">'  + fmtTotal                  + '</td>';
+        '<td>' + esc(r.brand||'—') + '</td>' +
+        '<td><strong>' + esc(r.partName||'—') + '</strong>' +
+          (r.barcode ? '<br><span class="small">' + esc(r.barcode) + '</span>' : '') + '</td>' +
+        '<td>' + esc(r.partNumber||'—') + '</td>' +
+        '<td>' + esc(r.oemPartNumber||'—') + '</td>' +
+        '<td>' + esc(r.category||'—') + '</td>' +
+        '<td>' + esc(r.compatibleWith||'—') + '</td>' +
+        '<td style="max-width:260px;white-space:normal">' + esc(r.description||'—') + '</td>' +
+        '<td style="text-align:center">' + (r.quantity !== '' && r.quantity !== undefined ? esc(String(r.quantity)) : '—') + '</td>';
       body.appendChild(tr);
     });
   });
