@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Citywide Inventory — Web App v2.25</title>
+  <title>Citywide Inventory — Web App v2.26</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -97,7 +97,7 @@
     <div class="brand">
       <img src="https://images.squarespace-cdn.com/content/v1/562e914be4b07324c716280e/1445893787747-ZY45YJQ73Y5V4688H3SD/Citywide%5BNew%5D.gif?format=1000w" alt="logo">
       <div>
-        <div style="font-weight:800">Citywide Inventory — Web App v2.25</div>
+        <div style="font-weight:800">Citywide Inventory — Web App v2.26</div>
         <div class="small signedInWrap">
           Signed in as: <span id="currentUser">...</span>
           <div id="btnSignIn"></div>
@@ -821,6 +821,9 @@ function showCard(id){
     loadNarcLookups();
     if($('narcMode') && $('narcMode').value === 'kit') initNarcKitRows();
     if($('narcMode') && $('narcMode').value === 'verify') loadNarcVerifyRows();
+  }
+  if(id === 'bagCard'){
+    initRestockRows();
   }
   if(id === 'cabinetCard'){
     initCabinetRestockRows();
